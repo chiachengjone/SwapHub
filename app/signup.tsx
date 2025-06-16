@@ -1,62 +1,55 @@
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import React from 'react'
-import { Link, router, Stack } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
-import { Colors } from '@/constants/Colors'
-import InputField from '@/components/InputField'
-import SocialLoginButtons from '@/components/SocialLoginButtons'
+import React, { useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router';
+import InputField from '@/components/InputField';
+import { Colors } from '@/constants/Colors';
+import { firebase_auth } from '@/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
-type Props = {}
+const SignUpScreen = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
-const SignUpScreen = (props: Props) => {
+  const handleSignUp = async () => {
+    setError('');
+    try {
+      await createUserWithEmailAndPassword(firebase_auth, email, password);
+      router.replace('/signin'); // Adjust route as needed
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+
   return (
-    <>
-      <Stack.Screen options={{
-        headerTitle: "Sign Up", headerLeft: () => (
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name='close' size={24} color={Colors.black} />
-          </TouchableOpacity>
-        )
-      }} />
-      <View style={styles.container}>
-        <Text style={styles.title}>Create an Account</Text>
-        <InputField
-          placeholder="Email Address"
-          placeholderTextColor={Colors.gray}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <InputField
-          placeholder="Password"
-          placeholderTextColor={Colors.gray}
-          secureTextEntry={true}
-        />
-        <InputField
-          placeholder="Confirm Password"
-          placeholderTextColor={Colors.gray}
-          secureTextEntry={true}
-        />
-
-        <TouchableOpacity style={styles.btn}>
-          <Text style={styles.btnTxt}> Create an Account</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.loginTxt}>
-          Already have an account? {" "}
-          <Link href={"/signin"} asChild>
-            <TouchableOpacity>
-              <Text style={styles.loginTxtSpan}>Sign In</Text>
-            </TouchableOpacity>
-          </Link>
+    <View style={styles.container}>
+      <Text style={styles.title}>Create an Account</Text>
+      <InputField
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+      <InputField
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+      {error ? <Text style={{ color: 'red' }}>{error}</Text> : null}
+      <TouchableOpacity style={styles.btn} onPress={handleSignUp}>
+        <Text style={styles.btnTxt}>Create an Account</Text>
+      </TouchableOpacity>
+      <Text style={styles.loginTxt}>
+        Already have an account?{' '}
+        <Text style={styles.loginTxtSpan} onPress={() => router.replace('/signin')}>
+          Sign In
         </Text>
-
-      <View style={styles.divider} />
-
-      <SocialLoginButtons emailHref={'/signin'} />
-      </View>
-    </>
-  )
-}
+      </Text>
+    </View>
+  );
+};
 
 export default SignUpScreen
 
