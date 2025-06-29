@@ -21,12 +21,16 @@ export default function TabLayout() {
           <Ionicons name='search-outline' size={22} color={color} />
         )
       }} />
-      <Tabs.Screen name='notifications' options={{
-        title: 'Notification',
-        tabBarIcon: ({ color }) => (
-          <Ionicons name='notifications-outline' size={22} color={color} />
-        )
-      }} />
+      <Tabs.Screen
+        name="post"
+        options={{
+          title: 'Post',
+          tabBarLabel: 'Post',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'create' : 'create-outline'} color={color} size={24} />
+          ),
+        }}
+      />
       <Tabs.Screen name='cart' options={{
         title: 'Cart',
         tabBarBadge: 3,
