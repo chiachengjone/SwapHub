@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { View, TextInput, Button, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc } from 'firebase/firestore';
 import { firebase_db } from '@/firebase';
 import { firebase_auth } from '@/firebase';
-
 
 const CLASS_TYPE_OPTIONS = ["Lecture", "Tutorial", "Lab"];
 
@@ -21,49 +20,64 @@ export default function NotificationsScreen() {
     }
   };
 
- const handleSubmit = async () => {
-  // Get the current user
-  const user = firebase_auth.currentUser;
-  if (!user) {
-    alert('You must be signed in to post a listing.');
-    return;
-  }
+  const handleSubmit = async () => {
+    const user = firebase_auth.currentUser;
+    if (!user) {
+      alert('You must be signed in to post a listing.');
+      return;
+    }
 
-  // Add the listing to Firestore with userId
-  await addDoc(collection(firebase_db, 'listings'), {
-    modName,
-    currentSlot,
-    desiredSlot,
-    classType,
-    userId: user.uid, // <-- Add this line
-  });
+    // Fetch username from users collection
+    let username = '';
+    try {
+      const userDoc = await getDoc(doc(firebase_db, 'users', user.uid));
+      if (userDoc.exists()) {
+        username = userDoc.data().username || '';
+      }
+    } catch (e) {
+      username = '';
+    }
 
-  // Optionally, clear form or navigate
-  setModName('');
-  setCurrentSlot('');
-  setDesiredSlot('');
-  setClassType([]);
-};
+    await addDoc(collection(firebase_db, 'listings'), {
+      modName,
+      currentSlot,
+      desiredSlot,
+      classType,
+      userId: user.uid,
+      username,
+    });
 
+    setModName('');
+    setCurrentSlot('');
+    setDesiredSlot('');
+    setClassType([]);
+    alert('Listing posted!');
+  };
 
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Create a New Listing</Text>
+
+      <Text style={styles.label}>Module Name:</Text>
       <TextInput
         style={styles.input}
-        placeholder="Mod Name"
+        placeholder="e.g. CS2103"
         value={modName}
         onChangeText={setModName}
       />
+
+      <Text style={styles.label}>Current Slot:</Text>
       <TextInput
         style={styles.input}
-        placeholder="Current Slot (e.g., Monday 10am)"
+        placeholder="Your current slot"
         value={currentSlot}
         onChangeText={setCurrentSlot}
       />
+
+      <Text style={styles.label}>Desired Slot:</Text>
       <TextInput
         style={styles.input}
-        placeholder="Desired Slot (e.g., Wednesday 2pm)"
+        placeholder="Slot you want"
         value={desiredSlot}
         onChangeText={setDesiredSlot}
       />
@@ -72,18 +86,20 @@ export default function NotificationsScreen() {
       {CLASS_TYPE_OPTIONS.map(option => (
         <TouchableOpacity
           key={option}
-          style={styles.checkboxContainer}
           onPress={() => handleToggleClassType(option)}
+          style={styles.checkboxContainer}
         >
-          <View style={[
-            styles.checkbox,
-            classType.includes(option) && styles.checkboxChecked
-          ]} />
+          <View
+            style={[
+              styles.checkbox,
+              classType.includes(option) && styles.checkboxChecked
+            ]}
+          />
           <Text style={styles.checkboxLabel}>{option}</Text>
         </TouchableOpacity>
       ))}
 
-      <Button title="Create Listing" onPress={handleSubmit} />
+      <Button title="Post Listing" onPress={handleSubmit} />
     </View>
   );
 }
@@ -95,8 +111,13 @@ const styles = StyleSheet.create({
   label: { fontWeight: 'bold', marginBottom: 8 },
   checkboxContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   checkbox: {
-    width: 20, height: 20, borderWidth: 1, borderColor: '#333',
-    backgroundColor: '#fff', marginRight: 8, borderRadius: 4,
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: '#333',
+    backgroundColor: '#fff',
+    marginRight: 8,
+    borderRadius: 4,
   },
   checkboxChecked: { backgroundColor: '#333' },
   checkboxLabel: { fontSize: 16 },

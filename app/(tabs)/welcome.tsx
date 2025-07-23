@@ -10,60 +10,47 @@ interface Listing {
   desiredSlot: string;
   classType: string[];
   userId: string;
+  username?: string;
 }
 
 const HomeScreen = () => {
   const [listings, setListings] = useState<Listing[]>([]);
   const [filteredListings, setFilteredListings] = useState<Listing[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(firebase_db, 'listings'), (snapshot) => {
-      const data: Listing[] = snapshot.docs.map(doc => {
-        const docData = doc.data() as Omit<Listing, 'id'>;
-        return {
-          ...docData,
-          id: doc.id
-        };
-      });
-      setListings(data);
-      setFilteredListings(data); // Initialize filtered list with all data
+    const unsub = onSnapshot(collection(firebase_db, 'listings'), (snapshot) => {
+      const items: Listing[] = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Listing, 'id'>),
+      }));
+      setListings(items);
+      setFilteredListings(items);
       setLoading(false);
     });
-    return unsubscribe;
+    return () => unsub();
   }, []);
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    const lowerQuery = query.toLowerCase().trim();
-
-    if (!lowerQuery) {
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
       setFilteredListings(listings);
-      return;
+    } else {
+      const lowered = searchTerm.toLowerCase();
+      const filtered = listings.filter(
+        (item) =>
+          item.modName.toLowerCase().includes(lowered) ||
+          item.classType.some((type) => type.toLowerCase().includes(lowered))  // ✅ match classType
+      );
+      setFilteredListings(filtered);
     }
-
-    const filtered = listings.filter(listing =>
-      listing.modName.toLowerCase().includes(lowerQuery) ||
-      listing.classType.some(type => type.toLowerCase().includes(lowerQuery))
-    );
-
-    setFilteredListings(filtered);
-  };
-
-  const renderItem = ({ item }: { item: Listing }) => (
-    <View style={styles.card}>
-      <Text style={styles.title}>{item.modName}</Text>
-      <Text>Current Slot: {item.currentSlot}</Text>
-      <Text>Desired Slot: {item.desiredSlot}</Text>
-      <Text>Class Types: {item.classType.join(', ')}</Text>
-    </View>
-  );
+  }, [searchTerm, listings]);
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#999" />
+        <Text>Loading listings...</Text>
       </View>
     );
   }
@@ -71,79 +58,56 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <TextInput
-        style={styles.searchBar}
-        placeholder="Search by mod name or class type..."
-        placeholderTextColor="#888"
-        value={searchQuery}
-        onChangeText={handleSearch}
-        clearButtonMode="while-editing"
+        style={styles.searchInput}
+        placeholder="Search by module or class type..."
+        placeholderTextColor="#999"
+        value={searchTerm}
+        onChangeText={setSearchTerm}
       />
-
+      <Text style={styles.header}>All Listings</Text>
       <FlatList
         data={filteredListings}
-        keyExtractor={item => item.id}
-        renderItem={renderItem}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {searchQuery ? "No matching listings found" : "No listings available"}
-            </Text>
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.listItem}>
+            <Text style={styles.itemTitle}>{item.modName}</Text>
+            <Text>Current: {item.currentSlot}</Text>
+            <Text>Desired: {item.desiredSlot}</Text>
+            <Text>Class Types: {item.classType.join(', ')}</Text>
+            <Text style={styles.poster}>Posted by: {item.username || 'Unknown'}</Text>
           </View>
-        }
-        contentContainerStyle={styles.listContent}
+        )}
+        ListEmptyComponent={<Text>No listings found.</Text>}
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
-  },
-  searchBar: {
-    height: 50,
-    borderColor: '#ddd',
+  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
+  header: { fontSize: 22, fontWeight: 'bold', marginBottom: 16 },
+  listItem: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    marginBottom: 16,
-    backgroundColor: '#f8f8f8',
-  },
-  card: {
-    backgroundColor: '#fff',
+    borderColor: '#ddd',
     borderRadius: 8,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: '#fafafa',
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#333',
-  },
-  listContent: {
-    paddingBottom: 20,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 50,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+  itemTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  poster: { marginTop: 8, color: '#666' },
+  searchInput: {
+    height: 50, 
+    fontSize: 16, 
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 10,
+    marginBottom: 16,
+    backgroundColor: '#f2f2f2',
+    color: '#000',
   },
 });
 
 export default HomeScreen;
-
