@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
+/* app/(tabs)/welcome.tsx */
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,12 +8,18 @@ import {
   ActivityIndicator,
   TextInput,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  DocumentData,
+} from 'firebase/firestore';
 import { firebase_db, firebase_auth } from '@/firebase';
+import { router } from 'expo-router';
 import { getOrCreateChat } from '@/lib/chat';
 
 /* ---------- types ---------- */
@@ -21,107 +28,166 @@ interface Listing {
   modName: string;
   currentSlot: string;
   desiredSlot: string;
-  classType: string[];
+  classType?: string[];
   userId: string;
   username?: string;
+  isMatch?: boolean;
 }
-type ListingFromDB = Omit<Listing, 'id'>;
 
-/* ---------- component ---------- */
-export default function HomeScreen() {
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [filter, setFilter] = useState('');
+export default function WelcomeScreen() {
+  const [allListings, setAllListings] = useState<Listing[]>([]);
+  const [myListings,  setMyListings]  = useState<Listing[]>([]);
+  const [search,      setSearch]      = useState('');
+  const [loading,     setLoading]     = useState(true);
 
-  /* live Firestore listener */
+  const uid = firebase_auth.currentUser?.uid ?? '';
+
+  /* ---- stream listings (unchanged) ---- */
   useEffect(() => {
-    const q = query(
-      collection(firebase_db, 'listings'),
-      orderBy('modName', 'asc'),
-    );
-
-    const unsub = onSnapshot(q, snap => {
-      const data = snap.docs.map(d => ({
-        id: d.id,
-        ...(d.data() as ListingFromDB),
-      }));
-      setListings(data);
+    const unsub = onSnapshot(collection(firebase_db, 'listings'), snap => {
+      const list: Listing[] = [];
+      snap.forEach(d =>
+        list.push({ id: d.id, ...(d.data() as DocumentData) } as Listing),
+      );
+      setAllListings(list);
+      setLoading(false);
     });
-
     return unsub;
   }, []);
 
-  /* ---------- helpers ---------- */
-  const handleChatPress = useCallback(
-    async (otherUid: string) => {
-      if (!firebase_auth.currentUser) {
-        alert('Please sign in to start a chat');
-        return;
-      }
+  useEffect(() => {
+    if (!uid) return;
+    const q = query(
+      collection(firebase_db, 'listings'),
+      where('userId', '==', uid),
+    );
+    const unsub = onSnapshot(q, snap => {
+      const mine: Listing[] = [];
+      snap.forEach(d =>
+        mine.push({ id: d.id, ...(d.data() as DocumentData) } as Listing),
+      );
+      setMyListings(mine);
+    });
+    return unsub;
+  }, [uid]);
 
-      // Create / fetch the room and obtain its id
-      const chatId  = await getOrCreateChat(otherUid);
-
-      // Push "[chatId]" onto the Chat stack (no leading slash!)
-      router.push({
-        pathname: '/chat/[chatId]',
-        params: { chatId },
-      });
+  /* helpers (unchanged) */
+  const slotMatch = useCallback(
+    (wanted: string | string[], slot: string) => {
+      if (Array.isArray(wanted)) return wanted.includes(slot.trim());
+      return wanted.split(/[, ]+/).includes(slot.trim());
     },
     [],
   );
-
-  /* ---------- render each card ---------- */
-const renderItem = ({ item }: { item: Listing }) => {
-  if (filter && !item.modName.toLowerCase().includes(filter.toLowerCase()))
-    return null;
-
-  // does this listing belong to the current user?
-  const isOwnListing = item.userId === firebase_auth.currentUser?.uid;
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.mod}>{item.modName}</Text>
-      <Text style={styles.row}>Current slot: {item.currentSlot}</Text>
-      <Text style={styles.row}>Desired slot: {item.desiredSlot}</Text>
-
-      {/* Display username */}
-      <Text style={styles.username}>
-        Posted by: {item.username || 'Unknown user'}
-      </Text>
-
-      {/* CHAT BUTTON – show only for other people’s listings */}
-      {!isOwnListing && (
-        <TouchableOpacity
-          style={styles.chatBtn}
-          onPress={() => handleChatPress(item.userId)}
-        >
-          <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
-          <Text style={styles.chatTxt}>Chat</Text>
-        </TouchableOpacity>
-      )}
-    </View>
+  const sameClassType = useCallback(
+    (a?: string[], b?: string[]) =>
+      !!a?.length && !!b?.length && a.some(t => b.includes(t)),
+    [],
   );
-};
 
+  /* build feed (unchanged) */
+  const feed = useMemo(() => {
+    const others = allListings.filter(l => l.userId !== uid);
+
+    const matches: Listing[] = [];
+    const rest:    Listing[] = [];
+
+    others.forEach(listing => {
+      const perfect = myListings.some(my =>
+        listing.modName === my.modName &&
+        slotMatch(listing.desiredSlot, my.currentSlot) &&
+        slotMatch(my.desiredSlot,   listing.currentSlot) &&
+        sameClassType(my.classType, listing.classType),
+      );
+      (perfect ? matches : rest).push({ ...listing, isMatch: perfect });
+    });
+
+    return [...matches, ...rest].filter(l =>
+      l.modName.toLowerCase().includes(search.toLowerCase()),
+    );
+  }, [allListings, myListings, slotMatch, sameClassType, uid, search]);
+
+  /* open chat (unchanged) */
+  const handleChatPress = async (otherUid: string, otherName?: string) => {
+    try {
+      const chatId = await getOrCreateChat(otherUid);
+      router.push({
+        pathname: '/chat/[chatId]',
+        params: { chatId, otherUid, otherName: otherName ?? otherUid },
+      });
+    } catch (e) {
+      console.warn('failed to open chat', e);
+      Alert.alert('Oops', 'Could not open chat. Please try again.');
+    }
+  };
 
   /* ---------- UI ---------- */
-  if (!listings.length) {
-    return <ActivityIndicator style={{ flex: 1 }} />;
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
 
   return (
     <View style={styles.container}>
-      <TextInput
-        placeholder="Search module name…"
-        value={filter}
-        onChangeText={setFilter}
-        style={styles.search}
-      />
+      {/* ==== SEARCH BAR (unchanged) ==== */}
+      <View style={styles.searchBox}>
+        <Ionicons name="search-outline" size={18} color="#666" />
+        <TextInput
+          style={styles.input}
+          placeholder="Search module..."
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
 
       <FlatList
-        data={listings}
+        data={feed}
         keyExtractor={item => item.id}
-        renderItem={renderItem}
+        contentContainerStyle={feed.length === 0 && styles.center}
+        ListEmptyComponent={<Text>No listings found.</Text>}
+        renderItem={({ item }) => (
+          <View style={[styles.card, item.isMatch && styles.matchCard]}>
+            <View style={styles.row}>
+              {/* LEFT: details */}
+              <View style={styles.details}>
+                <Text style={styles.mod}>{item.modName}</Text>
+
+                <View style={styles.typeRow}>
+                  <Ionicons
+                    name="bookmark-outline"
+                    size={14}
+                    color="#555"
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={styles.typeText}>
+                    {item.classType?.join(', ') ?? 'N/A'}
+                  </Text>
+                </View>
+
+                <Text style={styles.slot}>{`Current Slot: ${item.currentSlot}`}</Text>
+                <Text style={styles.slot}>{`Wants: ${item.desiredSlot}`}</Text>
+                <Text style={styles.by}>{`by ${item.username ?? 'unknown'}`}</Text>
+              </View>
+
+              {/* RIGHT: chat button (icon + text) */}
+              <TouchableOpacity
+                style={styles.chatBtn}
+                onPress={() => handleChatPress(item.userId, item.username)}
+              >
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={20}
+                  color="#007aff"
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={styles.chatLabel}>Chat</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       />
     </View>
   );
@@ -129,42 +195,60 @@ const renderItem = ({ item }: { item: Listing }) => {
 
 /* ---------- styles ---------- */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#fafafa' },
+  center:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  search: {
+  /* search bar */
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ececec',
     margin: 16,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 8,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 42,
   },
+  input: { flex: 1, marginLeft: 8, height: '100%', fontSize: 15 },
 
+  /* listing card */
   card: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
+    backgroundColor: '#fff',
+    padding: 14,
+    marginHorizontal: 16,
+    marginVertical: 7,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  mod: { fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
-  row: { color: '#555', marginBottom: 2 },
-
-  username: {
-    color: '#888',
-    fontSize: 12,
-    fontStyle: 'italic',
-    marginBottom: 8,
+  matchCard: {
+    backgroundColor: '#e9ffe9',
+    borderWidth: 1,
+    borderColor: '#34c759',
   },
+  row: { flexDirection: 'row' },
 
+  /* left column */
+  details: { flex: 1 },
+  mod: { fontSize: 18, fontWeight: '700', marginBottom: 6 },
+  typeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  typeText: { fontSize: 14, color: '#555' },
+  slot: { fontSize: 14, marginBottom: 2 },
+  by:   { marginTop: 6, fontSize: 12, color: '#777', fontStyle: 'italic' },
+
+  /* chat button */
   chatBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007aff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    alignSelf: 'flex-start',    
-    marginTop: 8,
+    padding: 6,
+    marginLeft: 10,
+    alignSelf: 'flex-start',
   },
-  chatTxt: { color: '#fff', marginLeft: 6 },
+  chatLabel: { color: '#007aff', fontSize: 14, fontWeight: '600' },
 });
+
+
+
 
 

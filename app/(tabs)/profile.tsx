@@ -24,6 +24,10 @@ import {
 import { firebase_auth, firebase_db } from '@/firebase';
 
 /* ------------------------------------------------------------------ */
+/* ----------------------------- NEW -------------------------------- */
+type UserDoc = { username?: string };        // loose typing
+/* ------------------------------------------------------------------ */
+
 /* ---------------------------- HELPERS ------------------------------ */
 const fetchDescriptionFromNUSMods = async (code: string): Promise<string> => {
   const moduleCode = code.trim().toUpperCase();
@@ -37,8 +41,7 @@ const fetchDescriptionFromNUSMods = async (code: string): Promise<string> => {
   return data.description ?? 'No description available.';
 };
 
-/* ------------------------------------------------------------------ */
-/* ----------------------------- TYPES ------------------------------- */
+/* ----------------------------- TYPES ------------------------------ */
 interface Listing {
   id: string;
   modName: string;
@@ -49,7 +52,6 @@ interface Listing {
   username?: string;
 }
 
-/* ------------------------------------------------------------------ */
 /* --------------------- HEADER & FOOTER COMPONENTS ------------------ */
 type HeaderProps = {
   modQuery: string;
@@ -99,13 +101,21 @@ const ListHeader = memo(
 );
 ListHeader.displayName = 'ListHeader';
 
-const ListFooter: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => (
-  <TouchableOpacity style={styles.signOutBtn} onPress={onSignOut}>
-    <Text style={styles.signOutBtnText}>Sign Out</Text>
-  </TouchableOpacity>
+/* ---------- FOOTER (now also shows username) ---------- */
+type FooterProps = { onSignOut: () => void; username?: string };
+
+const ListFooter: React.FC<FooterProps> = ({ onSignOut, username }) => (
+  <>
+    {username ? (
+      <Text style={styles.loggedInText}>Logged in as “{username}”</Text>
+    ) : null}
+
+    <TouchableOpacity style={styles.signOutBtn} onPress={onSignOut}>
+      <Text style={styles.signOutBtnText}>Sign Out</Text>
+    </TouchableOpacity>
+  </>
 );
 
-/* ------------------------------------------------------------------ */
 /* --------------------------- COMPONENT ----------------------------- */
 const ProfileScreen = () => {
   /* ---------- Firestore data ---------- */
@@ -114,6 +124,21 @@ const ProfileScreen = () => {
 
   const auth = firebase_auth;
   const user = auth.currentUser;
+
+  /* ---------- username ---------- */
+  const [username, setUsername] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchName = async () => {
+      const uDoc = await getDoc(doc(firebase_db, 'users', user.uid));
+      if (uDoc.exists()) {
+        setUsername((uDoc.data() as UserDoc).username ?? 'Unknown');
+      }
+    };
+    fetchName();
+  }, [user]);
 
   /* ---------- NUSMods search ---------- */
   const [modQuery, setModQuery] = useState('');
@@ -136,13 +161,15 @@ const ProfileScreen = () => {
         const data = d.data() as Listing;
 
         // fetch username if not already present
-        let username = data.username;
-        if (!username) {
+        let uName = data.username;
+        if (!uName) {
           const uDoc = await getDoc(doc(firebase_db, 'users', data.userId));
-          username = uDoc.exists() ? (uDoc.data().username as string) : 'Unknown';
+          uName = uDoc.exists()
+            ? ((uDoc.data() as UserDoc).username as string)
+            : 'Unknown';
         }
 
-        items.push({ ...data, id: d.id, username });
+        items.push({ ...data, id: d.id, username: uName });
       }
       setUserListings(items);
       setDbLoading(false);
@@ -216,7 +243,9 @@ const ProfileScreen = () => {
           dbLoading={dbLoading}
         />
       }
-      ListFooterComponent={<ListFooter onSignOut={handleSignOut} />}
+      ListFooterComponent={
+        <ListFooter onSignOut={handleSignOut} username={username} />
+      }
       ListEmptyComponent={
         !dbLoading ? (
           <Text style={styles.emptyText}>No listings yet.</Text>
@@ -226,7 +255,6 @@ const ProfileScreen = () => {
   );
 };
 
-/* ------------------------------------------------------------------ */
 /* ----------------------------- STYLES ------------------------------ */
 const styles = StyleSheet.create({
   container: {
@@ -298,9 +326,17 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 
+  /* Logged-in text */
+  loggedInText: {
+    alignSelf: 'center',
+    marginBottom: 8,
+    fontSize: 15,
+    fontStyle: 'italic',
+  },
+
   /* Sign-out */
   signOutBtn: {
-    marginTop: 24,
+    marginTop: 8,
     alignSelf: 'center',
     backgroundColor: '#6c757d',
     paddingHorizontal: 20,
@@ -314,6 +350,7 @@ const styles = StyleSheet.create({
 });
 
 export default ProfileScreen;
+
 
 
 
