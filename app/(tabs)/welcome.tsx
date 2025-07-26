@@ -9,6 +9,8 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -21,6 +23,9 @@ import {
 import { firebase_db, firebase_auth } from '@/firebase';
 import { router } from 'expo-router';
 import { getOrCreateChat } from '@/lib/chat';
+
+/* ---------- constants ---------- */
+const CLASS_TYPE_OPTIONS = ['Lecture', 'Tutorial', 'Lab'];
 
 /* ---------- types ---------- */
 interface Listing {
@@ -38,11 +43,13 @@ export default function WelcomeScreen() {
   const [allListings, setAllListings] = useState<Listing[]>([]);
   const [myListings,  setMyListings]  = useState<Listing[]>([]);
   const [search,      setSearch]      = useState('');
+  const [filterType,  setFilterType]  = useState<string>(''); // NEW
+  const [showMenu,    setShowMenu]    = useState(false);      // NEW
   const [loading,     setLoading]     = useState(true);
 
   const uid = firebase_auth.currentUser?.uid ?? '';
 
-  /* ---- stream listings (unchanged) ---- */
+  /* ---- stream listings ---- */
   useEffect(() => {
     const unsub = onSnapshot(collection(firebase_db, 'listings'), snap => {
       const list: Listing[] = [];
@@ -85,7 +92,7 @@ export default function WelcomeScreen() {
     [],
   );
 
-  /* build feed (unchanged) */
+  /* ---- build feed ---- */
   const feed = useMemo(() => {
     const others = allListings.filter(l => l.userId !== uid);
 
@@ -102,12 +109,28 @@ export default function WelcomeScreen() {
       (perfect ? matches : rest).push({ ...listing, isMatch: perfect });
     });
 
-    return [...matches, ...rest].filter(l =>
+    let out = [...matches, ...rest];
+
+    /* text search */
+    out = out.filter(l =>
       l.modName.toLowerCase().includes(search.toLowerCase()),
     );
-  }, [allListings, myListings, slotMatch, sameClassType, uid, search]);
 
-  /* open chat (unchanged) */
+    /* class-type filter */
+    if (filterType) out = out.filter(l => l.classType?.includes(filterType));
+
+    return out;
+  }, [
+    allListings,
+    myListings,
+    slotMatch,
+    sameClassType,
+    uid,
+    search,
+    filterType,
+  ]);
+
+  /* ---- open chat ---- */
   const handleChatPress = async (otherUid: string, otherName?: string) => {
     try {
       const chatId = await getOrCreateChat(otherUid);
@@ -130,19 +153,72 @@ export default function WelcomeScreen() {
     );
   }
 
+  /* render drop-down menu items */
+  const renderMenuItem = (label: string, value: string) => (
+    <Pressable
+      key={label}
+      style={styles.menuItem}
+      onPress={() => {
+        setFilterType(value);
+        setShowMenu(false);
+      }}
+    >
+      <Text style={styles.menuText}>{label}</Text>
+    </Pressable>
+  );
+
   return (
     <View style={styles.container}>
-      {/* ==== SEARCH BAR (unchanged) ==== */}
-      <View style={styles.searchBox}>
-        <Ionicons name="search-outline" size={18} color="#666" />
-        <TextInput
-          style={styles.input}
-          placeholder="Search module..."
-          value={search}
-          onChangeText={setSearch}
-        />
+      {/* ==== TOP ROW: search bar + filter button ==== */}
+      <View style={styles.topRow}>
+        {/* (search bar markup untouched) */}
+        <View style={styles.searchBox}>
+          <Ionicons name="search-outline" size={18} color="#666" />
+          <TextInput
+            style={styles.input}
+            placeholder="Search module..."
+            value={search}
+            onChangeText={setSearch}
+          />
+        </View>
+
+        {/* filter button */}
+        <TouchableOpacity
+          style={styles.filterBtn}
+          onPress={() => setShowMenu(true)}
+        >
+          <Text
+            style={[
+              styles.filterLabel,
+              filterType && { color: '#007aff', fontWeight: '600' },
+            ]}
+          >
+            {filterType || 'Type'}
+          </Text>
+          <Ionicons
+            name="chevron-down"
+            size={16}
+            color={filterType ? '#007aff' : '#555'}
+            style={{ marginLeft: 2 }}
+          />
+        </TouchableOpacity>
       </View>
 
+      {/* --- drop-down modal --- */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={showMenu}
+        onRequestClose={() => setShowMenu(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setShowMenu(false)} />
+        <View style={styles.menu}>
+          {renderMenuItem('All', '')}
+          {CLASS_TYPE_OPTIONS.map(opt => renderMenuItem(opt, opt))}
+        </View>
+      </Modal>
+
+      {/* ==== FEED ==== */}
       <FlatList
         data={feed}
         keyExtractor={item => item.id}
@@ -198,17 +274,60 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fafafa' },
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  /* search bar */
+  /* top row */
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+
+  /* search bar (unchanged inside) */
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ececec',
-    margin: 16,
     borderRadius: 10,
     paddingHorizontal: 12,
     height: 42,
   },
   input: { flex: 1, marginLeft: 8, height: '100%', fontSize: 15 },
+
+  /* filter button */
+  filterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 10,
+    paddingHorizontal: 10,
+    height: 34,
+    borderWidth: 1,
+    borderRadius: 8,
+    borderColor: '#ccc',
+    backgroundColor: '#fff',
+  },
+  filterLabel: { fontSize: 13, color: '#555' },
+
+  /* modal drop-down */
+  backdrop: {
+    flex: 1,
+    backgroundColor: '#0006',
+  },
+  menu: {
+    position: 'absolute',
+    top: 70,                   // ≈ search bar Y + some spacing
+    right: 20,
+    backgroundColor: '#fff',
+    paddingVertical: 6,
+    borderRadius: 8,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    minWidth: 130,
+  },
+  menuItem: { paddingHorizontal: 14, paddingVertical: 10 },
+  menuText: { fontSize: 14, color: '#333' },
 
   /* listing card */
   card: {
@@ -247,6 +366,8 @@ const styles = StyleSheet.create({
   },
   chatLabel: { color: '#007aff', fontSize: 14, fontWeight: '600' },
 });
+
+
 
 
 
