@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { firebase_db, firebase_auth } from '@/firebase';
 import { getOrCreateChat } from '@/lib/chat';
 
+/* ---------- types ---------- */
 interface Listing {
   id: string;
   modName: string;
@@ -24,16 +25,19 @@ interface Listing {
   userId: string;
   username?: string;
 }
-
 type ListingFromDB = Omit<Listing, 'id'>;
 
+/* ---------- component ---------- */
 export default function HomeScreen() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [filter, setFilter] = useState('');
 
   /* live Firestore listener */
   useEffect(() => {
-    const q = query(collection(firebase_db, 'listings'), orderBy('modName', 'asc'));
+    const q = query(
+      collection(firebase_db, 'listings'),
+      orderBy('modName', 'asc'),
+    );
 
     const unsub = onSnapshot(q, snap => {
       const data = snap.docs.map(d => ({
@@ -46,38 +50,61 @@ export default function HomeScreen() {
     return unsub;
   }, []);
 
-  /* render each card */
-  const renderItem = ({ item }: { item: Listing }) => {
-    if (filter && !item.modName.toLowerCase().includes(filter.toLowerCase())) return null;
+  /* ---------- helpers ---------- */
+  const handleChatPress = useCallback(
+    async (otherUid: string) => {
+      if (!firebase_auth.currentUser) {
+        alert('Please sign in to start a chat');
+        return;
+      }
 
-    return (
-      <View style={styles.card}>
-        <Text style={styles.mod}>{item.modName}</Text>
-        <Text style={styles.row}>Current slot: {item.currentSlot}</Text>
-        <Text style={styles.row}>Desired slot: {item.desiredSlot}</Text>
-        
-        {/* Display username */}
-        <Text style={styles.username}>Posted by: {item.username || 'Unknown user'}</Text>
+      // Create / fetch the room and obtain its id
+      const chatId  = await getOrCreateChat(otherUid);
 
-        {/* CHAT BUTTON */}
+      // Push "[chatId]" onto the Chat stack (no leading slash!)
+      router.push({
+        pathname: '/chat/[chatId]',
+        params: { chatId },
+      });
+    },
+    [],
+  );
+
+  /* ---------- render each card ---------- */
+const renderItem = ({ item }: { item: Listing }) => {
+  if (filter && !item.modName.toLowerCase().includes(filter.toLowerCase()))
+    return null;
+
+  // does this listing belong to the current user?
+  const isOwnListing = item.userId === firebase_auth.currentUser?.uid;
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.mod}>{item.modName}</Text>
+      <Text style={styles.row}>Current slot: {item.currentSlot}</Text>
+      <Text style={styles.row}>Desired slot: {item.desiredSlot}</Text>
+
+      {/* Display username */}
+      <Text style={styles.username}>
+        Posted by: {item.username || 'Unknown user'}
+      </Text>
+
+      {/* CHAT BUTTON – show only for other people’s listings */}
+      {!isOwnListing && (
         <TouchableOpacity
           style={styles.chatBtn}
-          onPress={async () => {
-            if (!firebase_auth.currentUser) {
-              alert('Please sign in to start a chat');
-              return;
-            }
-            const chatId = await getOrCreateChat(item.userId);
-            router.push(`/chat/${chatId}`);
-          }}
+          onPress={() => handleChatPress(item.userId)}
         >
           <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
           <Text style={styles.chatTxt}>Chat</Text>
         </TouchableOpacity>
-      </View>
-    );
-  };
+      )}
+    </View>
+  );
+};
 
+
+  /* ---------- UI ---------- */
   if (!listings.length) {
     return <ActivityIndicator style={{ flex: 1 }} />;
   }
@@ -100,7 +127,7 @@ export default function HomeScreen() {
   );
 }
 
-/* styles */
+/* ---------- styles ---------- */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
@@ -119,10 +146,10 @@ const styles = StyleSheet.create({
   },
   mod: { fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
   row: { color: '#555', marginBottom: 2 },
-  
-  username: { 
-    color: '#888', 
-    fontSize: 12, 
+
+  username: {
+    color: '#888',
+    fontSize: 12,
     fontStyle: 'italic',
     marginBottom: 8,
   },

@@ -1,44 +1,49 @@
-import React, { useEffect, useState } from 'react';
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { firebase_auth } from '@/firebase';
-import { listenUnseen } from '@/lib/chat';
+import React, { useState, useEffect } from 'react'
+import { Tabs } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
+import { firebase_auth } from '@/firebase'
+import { listenUnseen } from '@/lib/chat'
 
-export default function TabLayout() {
-  const [badge, setBadge] = useState<number | undefined>();
-
+export default function RootLayout() {
+  const [badge, setBadge] = useState<number>()
   useEffect(() => {
-    const uid = firebase_auth.currentUser?.uid;
-    if (!uid) return;
-    const unsub = listenUnseen(uid, c => setBadge(c || undefined));
-    return unsub;
-  }, []);
+    const uid = firebase_auth.currentUser?.uid
+    if (!uid) return
+    const unsub = listenUnseen(uid, count => setBadge(count || undefined))
+    return unsub
+  }, [])
 
   return (
     <Tabs
       screenOptions={({ route }) => ({
+        headerShown: false,
         tabBarIcon: ({ color, size }) => {
-          const map: Record<string, keyof typeof Ionicons.glyphMap> = {
+          const icons: Record<string, any> = {
             welcome: 'home',
             explore: 'search',
             post: 'add-circle',
-            profile: 'person',
             chat: 'chatbubbles',
-          };
-          return <Ionicons name={map[route.name]} size={size} color={color} />;
+            profile: 'person',
+          }
+          return <Ionicons name={icons[route.name]} size={size} color={color} />
         },
       })}
     >
       <Tabs.Screen name="welcome" options={{ title: 'Home' }} />
       <Tabs.Screen name="explore" options={{ title: 'Explore' }} />
-      <Tabs.Screen name="post"    options={{ title: 'Post' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="post" options={{ title: 'Post' }} />
+      {/* only one "chat" tab here */}
       <Tabs.Screen
         name="chat"
-        options={{ title: 'Chat', tabBarBadge: badge, headerShown: false }}
+        options={{
+          title: 'Chats',
+          tabBarBadge: badge,
+          lazy: false,
+        }}
       />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
-  );
+  )
 }
 
 

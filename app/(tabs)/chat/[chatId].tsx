@@ -1,3 +1,4 @@
+// app/chat/[chatId].tsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { GiftedChat, IMessage } from 'react-native-gifted-chat';
 import {
@@ -10,6 +11,7 @@ import {
   updateDoc,
   doc,
   CollectionReference,
+  Timestamp,          // 👈 added
 } from 'firebase/firestore';
 import { firebase_db, firebase_auth } from '@/firebase';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
@@ -21,14 +23,12 @@ async function sendMessage(
   text: string,
   msgsRef: CollectionReference,
 ) {
-  // add the message
   await addDoc(msgsRef, {
     text,
     createdAt: serverTimestamp(),
     senderId: meUid,
     seenBy: [meUid],
   });
-  // update the room
   await updateDoc(doc(firebase_db, 'chats', chatId), {
     lastMessage: text,
     lastTime: serverTimestamp(),
@@ -58,10 +58,17 @@ export default function ChatRoom() {
       setMessages(
         snap.docs.map(d => {
           const data = d.data();
+
+          // -------- safe-guard in case createdAt is null ----------
+          const ts = data.createdAt as Timestamp | null | undefined;
+          const createdAt =
+            ts && typeof ts.toDate === 'function' ? ts.toDate() : new Date();
+          // --------------------------------------------------------
+
           return {
             _id: d.id,
             text: data.text,
-            createdAt: data.createdAt.toDate(),
+            createdAt,
             user: { _id: data.senderId },
           };
         }),
