@@ -1,10 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
-import { firebase_auth, firebase_db } from '@/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
+// app/(tabs)/profile.tsx
+import React, { useEffect, useState, memo } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  ActivityIndicator,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Pressable,
+} from 'react-native';
 import { router } from 'expo-router';
+import { signOut } from 'firebase/auth';
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  getDoc,
+  deleteDoc,
+} from 'firebase/firestore';
+import { firebase_auth, firebase_db } from '@/firebase';
 
+/* ------------------------------------------------------------------ */
+/* ---------------------------- HELPERS ------------------------------ */
+const fetchDescriptionFromNUSMods = async (code: string): Promise<string> => {
+  const moduleCode = code.trim().toUpperCase();
+  if (!moduleCode) throw new Error('Please enter a module code.');
+
+  const url = `https://api.nusmods.com/v2/2023-2024/modules/${moduleCode}.json`;
+  const res = await fetch(url);
+
+  if (!res.ok) throw new Error('Module not found on NUSMods.');
+  const data = await res.json();
+  return data.description ?? 'No description available.';
+};
+
+/* ------------------------------------------------------------------ */
+/* ----------------------------- TYPES ------------------------------- */
 interface Listing {
   id: string;
   modName: string;
@@ -12,130 +46,280 @@ interface Listing {
   desiredSlot: string;
   classType: string[];
   userId: string;
-  username?: string; 
+  username?: string;
 }
 
-const ProfileScreen = () => {
-  const [userListings, setUserListings] = useState<Listing[]>([]);
-  const [userProfile, setUserProfile] = useState<{ username?: string; email?: string } | null>(null);
-  const [loading, setLoading] = useState(true);
+/* ------------------------------------------------------------------ */
+/* --------------------- HEADER & FOOTER COMPONENTS ------------------ */
+type HeaderProps = {
+  modQuery: string;
+  onChangeQuery: (v: string) => void;
+  onSearch: () => void;
+  aiLoading: boolean;
+  aiAnswer: string;
+  dbLoading: boolean;
+};
 
+const ListHeader = memo(
+  ({
+    modQuery,
+    onChangeQuery,
+    onSearch,
+    aiLoading,
+    aiAnswer,
+    dbLoading,
+  }: HeaderProps) => (
+    <>
+      {/* NUSMods search bar */}
+      <View style={styles.searchBox}>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter module code (e.g., CS2030)…"
+          value={modQuery}
+          onChangeText={onChangeQuery}
+          returnKeyType="search"
+          onSubmitEditing={onSearch}
+        />
+        <Pressable style={styles.searchBtn} onPress={onSearch}>
+          <Text style={styles.searchBtnText}>Search</Text>
+        </Pressable>
+      </View>
+
+      {aiLoading && <ActivityIndicator style={{ marginTop: 12 }} />}
+      {!aiLoading && aiAnswer !== '' && (
+        <Text style={styles.answer}>{aiAnswer}</Text>
+      )}
+
+      <Text style={styles.sectionTitle}>My Listings</Text>
+      {dbLoading && (
+        <ActivityIndicator size="large" style={{ marginTop: 12 }} />
+      )}
+    </>
+  )
+);
+ListHeader.displayName = 'ListHeader';
+
+const ListFooter: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => (
+  <TouchableOpacity style={styles.signOutBtn} onPress={onSignOut}>
+    <Text style={styles.signOutBtnText}>Sign Out</Text>
+  </TouchableOpacity>
+);
+
+/* ------------------------------------------------------------------ */
+/* --------------------------- COMPONENT ----------------------------- */
+const ProfileScreen = () => {
+  /* ---------- Firestore data ---------- */
+  const [userListings, setUserListings] = useState<Listing[]>([]);
+  const [dbLoading, setDbLoading] = useState(true);
+
+  const auth = firebase_auth;
+  const user = auth.currentUser;
+
+  /* ---------- NUSMods search ---------- */
+  const [modQuery, setModQuery] = useState('');
+  const [aiAnswer, setAiAnswer] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
+  /* Fetch / listen for this user’s listings */
   useEffect(() => {
-    const user = firebase_auth.currentUser;
     if (!user) return;
 
-    const fetchProfile = async () => {
-      const docRef = doc(firebase_db, 'users', user.uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setUserProfile(docSnap.data());
-      }
-    };
-    fetchProfile();
+    const q = query(
+      collection(firebase_db, 'listings'),
+      where('userId', '==', user.uid)
+    );
 
-    const q = query(collection(firebase_db, 'listings'), where('userId', '==', user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const listings: Listing[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Listing, 'id'>),
-      }));
-      setUserListings(listings);
-      setLoading(false);
+    const unsub = onSnapshot(q, async snap => {
+      const items: Listing[] = [];
+
+      for (const d of snap.docs) {
+        const data = d.data() as Listing;
+
+        // fetch username if not already present
+        let username = data.username;
+        if (!username) {
+          const uDoc = await getDoc(doc(firebase_db, 'users', data.userId));
+          username = uDoc.exists() ? (uDoc.data().username as string) : 'Unknown';
+        }
+
+        items.push({ ...data, id: d.id, username });
+      }
+      setUserListings(items);
+      setDbLoading(false);
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => unsub();
+  }, [user]);
 
-  const handleSignOut = async () => {
+  /* Delete listing */
+  const handleDelete = async (id: string) => {
     try {
-      await signOut(firebase_auth);
-      router.replace('/signin');
-    } catch (error: any) {
-      alert('Error signing out: ' + error.message);
+      await deleteDoc(doc(firebase_db, 'listings', id));
+    } catch (e) {
+      console.error('Delete error', e);
     }
   };
 
-  const handleDelete = async (listingId: string) => {
+  /* Ask NUSMods */
+  const askNUSMods = async () => {
+    if (!modQuery.trim()) return;
+
     try {
-      await deleteDoc(doc(firebase_db, 'listings', listingId));
-    } catch (error: any) {
-      alert('Failed to delete listing: ' + error.message);
+      setAiLoading(true);
+      const desc = await fetchDescriptionFromNUSMods(modQuery);
+      setAiAnswer(desc);
+    } catch (err: any) {
+      setAiAnswer(err.message ?? 'Something went wrong.');
+    } finally {
+      setAiLoading(false);
     }
   };
 
-  if (loading) {
-    return <ActivityIndicator size="large" color="#000" />;
-  }
+  /* Render each listing */
+  const renderItem = ({ item }: { item: Listing }) => (
+    <View style={styles.card}>
+      <Text style={styles.modName}>{item.modName}</Text>
+      <Text>
+        Current: {item.currentSlot} → Desired: {item.desiredSlot}
+      </Text>
+      <Text>Type: {item.classType.join(', ')}</Text>
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Profile</Text>
-      <Text style={styles.info}>Username: {userProfile?.username || 'N/A'}</Text>
-      <Text style={styles.info}>Email: {userProfile?.email || 'N/A'}</Text>
-
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Text style={styles.signOutText}>Sign Out</Text>
+      <TouchableOpacity
+        style={styles.deleteBtn}
+        onPress={() => handleDelete(item.id)}
+      >
+        <Text style={styles.deleteBtnText}>Delete</Text>
       </TouchableOpacity>
-
-      <Text style={styles.subheader}>Your Listings</Text>
-
-      {userListings.length === 0 ? (
-        <Text>No listings found.</Text>
-      ) : (
-        <FlatList
-          data={userListings}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.listItem}>
-              <Text style={styles.modName}>{item.modName}</Text>
-              <Text>Current Slot: {item.currentSlot}</Text>
-              <Text>Desired Slot: {item.desiredSlot}</Text>
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDelete(item.id)}
-              >
-                <Text style={styles.deleteText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        />
-      )}
     </View>
+  );
+
+  /* Sign-out */
+  const handleSignOut = async () => {
+    await signOut(auth);
+    router.replace('/signin');
+  };
+
+  /* ----------------------------- JSX ------------------------------- */
+  return (
+    <FlatList
+      data={userListings}
+      keyExtractor={item => item.id}
+      renderItem={renderItem}
+      contentContainerStyle={styles.container}
+      ListHeaderComponent={
+        <ListHeader
+          modQuery={modQuery}
+          onChangeQuery={setModQuery}
+          onSearch={askNUSMods}
+          aiLoading={aiLoading}
+          aiAnswer={aiAnswer}
+          dbLoading={dbLoading}
+        />
+      }
+      ListFooterComponent={<ListFooter onSignOut={handleSignOut} />}
+      ListEmptyComponent={
+        !dbLoading ? (
+          <Text style={styles.emptyText}>No listings yet.</Text>
+        ) : null
+      }
+    />
   );
 };
 
+/* ------------------------------------------------------------------ */
+/* ----------------------------- STYLES ------------------------------ */
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  header: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
-  subheader: { fontSize: 20, fontWeight: 'bold', marginTop: 20, marginBottom: 8 },
-  info: { fontSize: 16, marginBottom: 4 },
-  listItem: { borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 6, marginVertical: 6 },
-  modName: { fontWeight: 'bold', fontSize: 18 },
-  signOutButton: {
-    backgroundColor: '#ff4444',
-    padding: 12,
-    borderRadius: 6,
-    marginTop: 16,
+  container: {
+    padding: 16,
+  },
+
+  /* Search bar */
+  searchBox: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  signOutText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 16,
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
   },
-  deleteButton: {
-    marginTop: 10,
-    backgroundColor: '#cc0000',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
+  searchBtn: {
+    backgroundColor: '#007bff',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
-  deleteText: {
+  searchBtnText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+  answer: {
+    marginTop: 16,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+
+  /* Listings */
+  sectionTitle: {
+    marginTop: 24,
+    marginBottom: 8,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  card: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  modName: {
+    fontWeight: '600',
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  deleteBtn: {
+    marginTop: 8,
+    backgroundColor: '#d9534f',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  deleteBtnText: {
+    color: '#fff',
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 20,
+  },
+
+  /* Sign-out */
+  signOutBtn: {
+    marginTop: 24,
+    alignSelf: 'center',
+    backgroundColor: '#6c757d',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  signOutBtnText: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });
 
 export default ProfileScreen;
+
+
+
+
+
+
+
+
+
