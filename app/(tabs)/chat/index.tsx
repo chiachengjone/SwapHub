@@ -1,3 +1,4 @@
+// app/(tabs)/chat/index.tsx   ← or wherever this file lives
 import React, { useEffect, useState } from 'react';
 import {
   FlatList,
@@ -6,6 +7,7 @@ import {
   View,
   ActivityIndicator,
   StyleSheet,
+  SafeAreaView,
 } from 'react-native';
 import {
   collection,
@@ -17,6 +19,7 @@ import {
   getDoc,
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
+import { Ionicons } from '@expo/vector-icons';          // ← added
 import { firebase_db, firebase_auth } from '@/firebase';
 import { router } from 'expo-router';
 
@@ -52,8 +55,6 @@ export default function ChatList() {
     );
 
     const unsubChats = onSnapshot(q, async snap => {
-      /* if the query itself fails you will see the error in metro – most often it
-         means the composite index listed at the end of this answer is missing */
       const tmp: ChatRow[] = await Promise.all(
         snap.docs.map(async d => {
           const data = d.data() as any;
@@ -97,43 +98,102 @@ export default function ChatList() {
   if (rows.length === 0) {
     return (
       <View style={styles.center}>
-        <Text>No conversations yet</Text>
+        <Ionicons name="chatbubbles-outline" size={48} color="#bbb" />
+        <Text style={{ marginTop: 8, color: '#777' }}>No conversations yet</Text>
       </View>
     );
   }
 
+  /* ---------- list ---------- */
+  const renderItem = ({ item }: { item: ChatRow }) => {
+    const initial =
+      item.otherName?.[0]?.toUpperCase?.() || item.otherUid?.[0]?.toUpperCase?.() || '?';
+
+    return (
+      <TouchableOpacity
+        style={styles.row}
+        activeOpacity={0.7}
+        onPress={() =>
+          router.push({
+            pathname: '/chat/[chatId]',
+            params: {
+              chatId: item.id,
+              otherUid: item.otherUid,
+              otherName: item.otherName,
+            },
+          })
+        }>
+        {/* Avatar */}
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initial}</Text>
+        </View>
+
+        {/* name + last message */}
+        <View style={styles.textCol}>
+          <Text style={styles.name} numberOfLines={1}>
+            {item.otherName}
+          </Text>
+          <Text style={styles.msg} numberOfLines={1}>
+            {item.lastMessage || ' '} {/* keep height even if empty */}
+          </Text>
+        </View>
+
+        {/* chevron */}
+        <Ionicons name="chevron-forward" size={18} color="#c5c5c5" />
+      </TouchableOpacity>
+    );
+  };
+
   return (
-    <FlatList
-      data={rows}
-      keyExtractor={i => i.id}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() =>
-            router.push({
-              pathname: '/chat/[chatId]',
-              params: {
-                chatId: item.id,
-                otherUid: item.otherUid,
-                otherName: item.otherName,
-              },
-            })
-          }>
-          <Text style={styles.name}>{item.otherName}</Text>
-          <Text style={styles.msg}>{item.lastMessage}</Text>
-        </TouchableOpacity>
-      )}
-    />
+    <SafeAreaView style={styles.safe}>
+      <FlatList
+        data={rows}
+        keyExtractor={i => i.id}
+        renderItem={renderItem}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        contentContainerStyle={{ paddingBottom: 12 }}
+      />
+    </SafeAreaView>
   );
 }
 
 /* ────────── styles ────────── */
+const AVATAR_SIZE = 42;
+
 const styles = StyleSheet.create({
-  row: { padding: 16, borderBottomWidth: 1, borderColor: '#ddd' },
-  name: { fontWeight: 'bold' },
-  msg: { color: '#555' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  safe: { flex: 1, backgroundColor: '#fff' },
+
+  /* rows */
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    backgroundColor: '#fff',
+  },
+
+  /* avatar */
+  avatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: '#007bff22',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  avatarText: { fontSize: 18, fontWeight: '700', color: '#007bff' },
+
+  /* text column */
+  textCol: { flex: 1 },
+  name: { fontWeight: '600', fontSize: 16, marginBottom: 2, color: '#111' },
+  msg: { color: '#555', fontSize: 14 },
+
+  /* other */
+  separator: { height: 1, backgroundColor: '#eee', marginLeft: AVATAR_SIZE + 18 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
 });
+
 
 
 
