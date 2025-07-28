@@ -167,7 +167,6 @@ export default function ChatRoom() {
 
         alwaysShowSend
         placeholder="Type a message…"
-        scrollToBottom
         renderBubble={renderBubble}
         renderSend={renderSend}
         renderInputToolbar={renderInputToolbar}

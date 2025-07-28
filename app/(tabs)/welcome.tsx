@@ -189,7 +189,7 @@ export default function WelcomeScreen() {
           <Text
             style={[
               styles.filterLabel,
-              filterType && { color: '#007aff', fontWeight: '600' },
+              filterType ? { color: '#007aff', fontWeight: '600' } : undefined
             ]}
           >
             {filterType || 'Type'}
