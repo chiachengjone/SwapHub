@@ -1,4 +1,3 @@
-// app/chat/[chatId].tsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { SafeAreaView, View, StyleSheet } from 'react-native';
 import {
@@ -92,7 +91,7 @@ export default function ChatRoom() {
     return unsub;
   }, [chatId]);
 
-  /* send via send-icon */
+  /* send via send icon */
   const onSend = useCallback(
     (newMsgs: IMessage[] = []) => {
       const { text } = newMsgs[0];
@@ -110,7 +109,7 @@ export default function ChatRoom() {
     }
   }, [chatId, inputText]);
 
-  /* ────────── custom renderers (UI only) ────────── */
+  /* custom renderers (UI only) */
   const renderBubble = (props: any) => (
     <Bubble
       {...props}
@@ -149,7 +148,7 @@ export default function ChatRoom() {
     <Ionicons name="chevron-down" size={24} color="#333" />
   );
 
-  /* ────────── render ────────── */
+  /* render */
   return (
     <SafeAreaView style={styles.safe}>
       <GiftedChat
@@ -178,7 +177,7 @@ export default function ChatRoom() {
   );
 }
 
-/* ────────── styles ────────── */
+/* styles */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f9fafe' },
 

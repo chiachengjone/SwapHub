@@ -1,4 +1,3 @@
-// app/chat/_layout.tsx
 import React from 'react'
 import { Stack } from 'expo-router'
 
@@ -18,7 +17,7 @@ export default function ChatLayout() {
         options={({ route }) => ({
           // read the otherName param for your header
           title: (route.params as any).otherName ?? 'Chat',
-          // show the ← back button
+          // show the back button
           headerBackTitleVisible: false,
         })}
       />

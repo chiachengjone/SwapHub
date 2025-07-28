@@ -7,24 +7,24 @@ import SocialLoginButtons from '@/components/SocialLoginButtons';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 
-// Import Firebase Auth
-import { firebase_auth } from '@/firebase'; // Adjust path if needed
+//Import Firebase Auth
+import { firebase_auth } from '@/firebase'; //Adjust path if needed
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
 type Props = {};
 
 const SignInScreen = (props: Props) => {
-  // State for input fields and error
+  //State for input fields and error
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  // Login handler
+  //Login handler
   const handleLogin = async () => {
     setError('');
     try {
       await signInWithEmailAndPassword(firebase_auth, email, password);
-      // Navigate to main app screen
+      //Navigate to main app screen
       router.dismissAll();
       router.push('/(tabs)/welcome');
     } catch (e: any) {

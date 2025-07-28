@@ -1,4 +1,3 @@
-// app/(tabs)/chat/index.tsx   ← or wherever this file lives
 import React, { useEffect, useState } from 'react';
 import {
   FlatList,
@@ -19,11 +18,11 @@ import {
   getDoc,
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import { Ionicons } from '@expo/vector-icons';          // ← added
+import { Ionicons } from '@expo/vector-icons';          // back button added
 import { firebase_db, firebase_auth } from '@/firebase';
 import { router } from 'expo-router';
 
-/* ────────── types ────────── */
+/* types */
 interface ChatRow {
   id: string;
   lastMessage: string;
@@ -31,7 +30,7 @@ interface ChatRow {
   otherName: string;
 }
 
-/* ────────── component ────────── */
+/* component */
 export default function ChatList() {
   const [me, setMe] = useState<string | null>(null);
   const [rows, setRows] = useState<ChatRow[]>([]);
@@ -46,7 +45,7 @@ export default function ChatList() {
 
   /* listen for all chats that involve this user */
   useEffect(() => {
-    if (!me) return; // not signed-in yet
+    if (!me) return; // not signed in yet
 
     const q = query(
       collection(firebase_db, 'chats'),
@@ -86,7 +85,7 @@ export default function ChatList() {
     return unsubChats;
   }, [me]);
 
-  /* ────────── UI ────────── */
+  /* UI */
   if (!me) {
     return (
       <View style={styles.center}>
@@ -104,7 +103,7 @@ export default function ChatList() {
     );
   }
 
-  /* ---------- list ---------- */
+  /* list */
   const renderItem = ({ item }: { item: ChatRow }) => {
     const initial =
       item.otherName?.[0]?.toUpperCase?.() || item.otherUid?.[0]?.toUpperCase?.() || '?';
@@ -128,7 +127,7 @@ export default function ChatList() {
           <Text style={styles.avatarText}>{initial}</Text>
         </View>
 
-        {/* name + last message */}
+        {/* name and last message */}
         <View style={styles.textCol}>
           <Text style={styles.name} numberOfLines={1}>
             {item.otherName}
@@ -157,7 +156,7 @@ export default function ChatList() {
   );
 }
 
-/* ────────── styles ────────── */
+/* styles */
 const AVATAR_SIZE = 42;
 
 const styles = StyleSheet.create({

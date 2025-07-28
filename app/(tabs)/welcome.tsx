@@ -1,4 +1,3 @@
-/* app/(tabs)/welcome.tsx */
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
@@ -24,10 +23,10 @@ import { firebase_db, firebase_auth } from '@/firebase';
 import { router } from 'expo-router';
 import { getOrCreateChat } from '@/lib/chat';
 
-/* ---------- constants ---------- */
+/* constants */
 const CLASS_TYPE_OPTIONS = ['Lecture', 'Tutorial', 'Lab'];
 
-/* ---------- types ---------- */
+/* types */
 interface Listing {
   id: string;
   modName: string;
@@ -43,13 +42,13 @@ export default function WelcomeScreen() {
   const [allListings, setAllListings] = useState<Listing[]>([]);
   const [myListings,  setMyListings]  = useState<Listing[]>([]);
   const [search,      setSearch]      = useState('');
-  const [filterType,  setFilterType]  = useState<string>(''); // NEW
-  const [showMenu,    setShowMenu]    = useState(false);      // NEW
+  const [filterType,  setFilterType]  = useState<string>('');
+  const [showMenu,    setShowMenu]    = useState(false);
   const [loading,     setLoading]     = useState(true);
 
   const uid = firebase_auth.currentUser?.uid ?? '';
 
-  /* ---- stream listings ---- */
+  /* stream listings */
   useEffect(() => {
     const unsub = onSnapshot(collection(firebase_db, 'listings'), snap => {
       const list: Listing[] = [];
@@ -92,7 +91,7 @@ export default function WelcomeScreen() {
     [],
   );
 
-  /* ---- build feed ---- */
+  /* build feed */
   const feed = useMemo(() => {
     const others = allListings.filter(l => l.userId !== uid);
 
@@ -130,7 +129,7 @@ export default function WelcomeScreen() {
     filterType,
   ]);
 
-  /* ---- open chat ---- */
+  /* open chat */
   const handleChatPress = async (otherUid: string, otherName?: string) => {
     try {
       const chatId = await getOrCreateChat(otherUid);
@@ -144,7 +143,7 @@ export default function WelcomeScreen() {
     }
   };
 
-  /* ---------- UI ---------- */
+  /* UI */
   if (loading) {
     return (
       <View style={styles.center}>
@@ -153,7 +152,7 @@ export default function WelcomeScreen() {
     );
   }
 
-  /* render drop-down menu items */
+  /* render dropdown menu items */
   const renderMenuItem = (label: string, value: string) => (
     <Pressable
       key={label}
@@ -169,7 +168,7 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ==== TOP ROW: search bar + filter button ==== */}
+      {/* TOP ROW: search bar + filter button */}
       <View style={styles.topRow}>
         {/* (search bar markup untouched) */}
         <View style={styles.searchBox}>
@@ -204,7 +203,7 @@ export default function WelcomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* --- drop-down modal --- */}
+      {/* drop-down modal */}
       <Modal
         animationType="fade"
         transparent
@@ -218,7 +217,7 @@ export default function WelcomeScreen() {
         </View>
       </Modal>
 
-      {/* ==== FEED ==== */}
+      {/* FEED */}
       <FlatList
         data={feed}
         keyExtractor={item => item.id}
@@ -269,7 +268,7 @@ export default function WelcomeScreen() {
   );
 }
 
-/* ---------- styles ---------- */
+/* styles */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fafafa' },
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -315,7 +314,7 @@ const styles = StyleSheet.create({
   },
   menu: {
     position: 'absolute',
-    top: 70,                   // ≈ search bar Y + some spacing
+    top: 70,                   // search bar Y + some spacing
     right: 20,
     backgroundColor: '#fff',
     paddingVertical: 6,

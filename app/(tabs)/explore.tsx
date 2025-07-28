@@ -1,4 +1,3 @@
-// app/(tabs)/explore.tsx
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   StyleSheet,
@@ -10,7 +9,7 @@ import {
   FlatList,
   Keyboard,
   Alert,
-  ScrollView,               // ← already added earlier
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -24,20 +23,14 @@ import {
 } from '@/lib/friends';
 
 
-/* ────────── types (existing) ────────── */
 type Listing = {
   id: string; modName: string; currentSlot: string; desiredSlot: string;
   classType: string[]; userId: string; username?: string;
 };
 
-
-/* ────────── new helper types ────────── */
 type FriendRow = { docId: string; uid: string; username: string };
 
-
-/* ────────── component ────────── */
 export default function ExploreScreen() {
-  /* ---------- search state ---------- */
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [userResult, setUserResult] = useState<{ uid: string; username: string } | null>(null);
@@ -45,24 +38,16 @@ export default function ExploreScreen() {
   const [userListings, setUserListings] = useState<Listing[] | null>(null);
   const [listingsLoading, setListingsLoading] = useState(false);
 
-
-  /* ---------- friends state ---------- */
   const [friends, setFriends] = useState<FriendRow[]>([]);
-  const [requests, setRequests] = useState<FriendRow[]>([]);   // incoming only
-
+  const [requests, setRequests] = useState<FriendRow[]>([]);
 
   const me = firebase_auth.currentUser;
 
-
-  /* ---------- Firestore listeners: friends & requests ---------- */
   useEffect(() => {
     if (!me) return;
 
-
     const ref = collection(firebase_db, 'friendRequests');
 
-
-    // accepted  → friends
     const qFriends = query(ref,
       where('users', 'array-contains', me.uid),
       where('accepted', '==', true),
@@ -74,7 +59,7 @@ export default function ExploreScreen() {
       for (const d of snap.docs) {
         const data = d.data() as any;
         const otherUid: string = data.users.find((u: string) => u !== me.uid);
-        // look up username
+        //look up username
         const uSnap = await getDocs(query(
           collection(firebase_db, 'users'), where('__name__', '==', otherUid)));
         const uName = uSnap.empty ? otherUid
@@ -84,19 +69,17 @@ export default function ExploreScreen() {
       setFriends(rows);
     });
 
-
-    // pending & I am the recipient → requests
+    //pending and I am the recipient
     const qReq = query(ref,
       where('users', 'array-contains', me.uid),
       where('accepted', '==', false),
     );
 
-
     const unsubReq = onSnapshot(qReq, async snap => {
       const rows: FriendRow[] = [];
       for (const d of snap.docs) {
         const data = d.data() as any;
-        if (data.requestFrom === me.uid) continue;   // skip outgoing
+        if (data.requestFrom === me.uid) continue;   //skip outgoing
         const otherUid: string = data.requestFrom;
         const uSnap = await getDocs(query(
           collection(firebase_db, 'users'), where('__name__', '==', otherUid)));
@@ -111,8 +94,6 @@ export default function ExploreScreen() {
     return () => { unsubFriends(); unsubReq(); };
   }, [me]);
 
-
-  /* ---------- search flow (unchanged) ---------- */
   const handleSearch = async () => {
     Keyboard.dismiss();
     setUserResult(null); setUserListings(null); setUserNotFound(false);
@@ -150,11 +131,8 @@ export default function ExploreScreen() {
     finally { setLoading(false); setListingsLoading(false); }
   };
 
-
   const onSubmitEditing = () => handleSearch();
 
-
-  /* ---------- chat + friend buttons ---------- */
   const handleChat = async (otherUid: string, otherName: string) => {
     if (!me) { Alert.alert('Auth error', 'You must be signed in.'); return; }
     if (otherUid === me.uid) { Alert.alert('Cannot chat yourself'); return; }
@@ -175,8 +153,6 @@ export default function ExploreScreen() {
     }
   };
 
-
-  /* ---------- UI pieces ----------------------------------------- */
   const renderListing = ({ item }: { item: Listing }) => (
     <View style={styles.card}>
       <Text style={styles.modName}>{item.modName}</Text>
@@ -189,7 +165,7 @@ export default function ExploreScreen() {
         style={styles.chatBtn}
         onPress={() => handleChat(item.userId, item.username || 'User')}
       >
-        <Ionicons name="chatbubbles-outline" color="#fff" size={16}/>
+        <Ionicons name="chatbubbles-outline" color="#fff" size={16} />
         <Text style={styles.chatBtnText}>Chat</Text>
       </TouchableOpacity>
     </View>
@@ -203,7 +179,7 @@ export default function ExploreScreen() {
         style={styles.chatBtn}
         onPress={() => handleChat(item.uid, item.username)}
       >
-        <Ionicons name="chatbubbles-outline" color="#fff" size={16}/>
+        <Ionicons name="chatbubbles-outline" color="#fff" size={16} />
         <Text style={styles.chatBtnText}>Chat</Text>
       </TouchableOpacity>
     </View>
@@ -218,27 +194,25 @@ export default function ExploreScreen() {
           style={[styles.chatBtn, { backgroundColor: '#28a745' }]}
           onPress={() => acceptRequest(item.docId)}
         >
-          <Ionicons name="checkmark" color="#fff" size={16}/>
+          <Ionicons name="checkmark" color="#fff" size={16} />
           <Text style={styles.chatBtnText}>Accept</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.chatBtn, { backgroundColor: '#d9534f', marginLeft: 8 }]}
           onPress={() => rejectRequest(item.docId)}
         >
-          <Ionicons name="close" color="#fff" size={16}/>
+          <Ionicons name="close" color="#fff" size={16} />
           <Text style={styles.chatBtnText}>Reject</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
-
-  /* ---------- searched user card (add-friend button) ------------ */
   const SearchedUserHeader = () => {
     if (!userResult) return null;
     const alreadyFriend = friends.some(f => f.uid === userResult.uid);
     const pending = requests.some(r => r.uid === userResult.uid)
-      || userResult.uid === me?.uid;   // cannot friend yourself
+      || userResult.uid === me?.uid;   //cannot friend yourself
     return (
       <View style={styles.profileSection}>
         <Text style={styles.profileName}>
@@ -251,7 +225,7 @@ export default function ExploreScreen() {
             style={[styles.chatBtn, { backgroundColor: '#ff9800', marginBottom: 12 }]}
             onPress={() => handleAddFriend(userResult.uid)}
           >
-            <Ionicons name="person-add" color="#fff" size={16}/>
+            <Ionicons name="person-add" color="#fff" size={16} />
             <Text style={styles.chatBtnText}>Add Friend</Text>
           </TouchableOpacity>
         )}
@@ -271,9 +245,8 @@ export default function ExploreScreen() {
   };
 
 
-  /* ---------- main JSX ------------------------------------------ */
   return (
-    <ScrollView                      /* was <View> */
+    <ScrollView                     
       style={styles.outer}
       contentContainerStyle={styles.scrollBody}
       showsVerticalScrollIndicator={false}
@@ -303,10 +276,10 @@ export default function ExploreScreen() {
       {userNotFound && <Text style={styles.emptyText}>No user found.</Text>}
 
 
-      {/* ------------- Listings section (shown only after search) ------------- */}
+      {/* Listings section (shown only after search) */}
       {userResult && (
         <View style={[styles.sectionWrapper, styles.listingsWrapper]}>
-          <SearchedUserHeader/>
+          <SearchedUserHeader />
 
 
           {listingsLoading ? (
@@ -327,7 +300,7 @@ export default function ExploreScreen() {
       )}
 
 
-      {/* ----------------------------- Friends section ------------------------ */}
+      {/* Friends section */}
       <View style={[styles.sectionWrapper, styles.friendsWrapper]}>
         <Text style={[styles.sectionTitle, { marginHorizontal: 16 }]}>Friends</Text>
         {friends.length === 0 ? (
@@ -345,7 +318,7 @@ export default function ExploreScreen() {
       </View>
 
 
-      {/* ------------------------ Friend Requests section ---------------------- */}
+      {/* Friend Requests section */}
       <View style={[styles.sectionWrapper, styles.requestsWrapper]}>
         <Text style={[styles.sectionTitle, { marginHorizontal: 16 }]}>Friend Requests</Text>
         {requests.length === 0 ? (
@@ -366,60 +339,68 @@ export default function ExploreScreen() {
 }
 
 
-/* ---------- styles (existing + new additions) ---------- */
+/* styles (existing + new additions) */
 const styles = StyleSheet.create({
-  /* --- container & scroll -------------------------------------- */
+  /* container & scroll */
   outer: { flex: 1, backgroundColor: '#fff' },
   scrollBody: { paddingBottom: 40 },
 
 
-  /* --- search & profile (unchanged) ----------------------------- */
+  /* search & profile (unchanged) */
   header: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, marginTop: 16, marginLeft: 16 },
   searchBox: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginHorizontal: 16 },
-  input: { flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
-           paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 },
+  input: {
+    flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 8, marginRight: 8
+  },
   searchBtn: { backgroundColor: '#007bff', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
   searchBtnText: { color: '#fff', fontWeight: '600' },
   emptyText: { textAlign: 'center', marginTop: 20, color: '#888' },
 
 
-  profileSection: { backgroundColor: '#f8f8f8', borderRadius: 10, padding: 18,
-                    marginTop: 20, marginHorizontal: 12 },
+  profileSection: {
+    backgroundColor: '#f8f8f8', borderRadius: 10, padding: 18,
+    marginTop: 20, marginHorizontal: 12
+  },
   profileName: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
   username: { color: '#007bff', fontWeight: 'bold' },
   sectionTitle: { marginTop: 16, marginBottom: 8, fontSize: 18, fontWeight: '700' },
 
 
-  /* --- cards ---------------------------------------------------- */
-  card: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-          padding: 12, marginBottom: 12, backgroundColor: '#fff', marginHorizontal: 12 },
+  /* cards */
+  card: {
+    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
+    padding: 12, marginBottom: 12, backgroundColor: '#fff', marginHorizontal: 12
+  },
   modName: { fontWeight: '600', fontSize: 16, marginBottom: 4 },
   ownerText: { color: '#888', marginTop: 4, fontSize: 13 },
 
 
-  /* --- buttons -------------------------------------------------- */
-  chatBtn: { marginTop: 8, backgroundColor: '#28a745', paddingVertical: 6,
-             borderRadius: 6, alignItems: 'center', flexDirection: 'row',
-             alignSelf: 'flex-start', paddingHorizontal: 12 },
+  /* buttons */
+  chatBtn: {
+    marginTop: 8, backgroundColor: '#28a745', paddingVertical: 6,
+    borderRadius: 6, alignItems: 'center', flexDirection: 'row',
+    alignSelf: 'flex-start', paddingHorizontal: 12
+  },
   chatBtnText: { color: '#fff', fontWeight: '600', marginLeft: 2 },
 
 
-  /* --- new: list preview window -------------------------------- */
+  /* new: list preview window */
   previewList: {
     maxHeight: 350,
     flexGrow: 0,
   },
 
-  /* --- new: section wrappers ----------------------------------- */
+  /* new: section wrappers */
   sectionWrapper: {
     marginTop: 24,
     marginHorizontal: 10,
     borderRadius: 10,
     paddingVertical: 12,
   },
-  listingsWrapper:  { backgroundColor: '#e3f2fd' },  // light blue
-  friendsWrapper:   { backgroundColor: '#e8f5e9' },  // light green
-  requestsWrapper:  { backgroundColor: '#fff3e0' },  // light orange
+  listingsWrapper: { backgroundColor: '#e3f2fd' },  // light blue
+  friendsWrapper: { backgroundColor: '#e8f5e9' },  // light green
+  requestsWrapper: { backgroundColor: '#fff3e0' },  // light orange
 });
 
 

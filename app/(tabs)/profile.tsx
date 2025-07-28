@@ -1,4 +1,3 @@
-// app/(tabs)/profile.tsx
 import React, { useEffect, useState, memo } from 'react';
 import {
   View,
@@ -23,12 +22,9 @@ import {
 } from 'firebase/firestore';
 import { firebase_auth, firebase_db } from '@/firebase';
 
-/* ------------------------------------------------------------------ */
-/* ----------------------------- NEW -------------------------------- */
-type UserDoc = { username?: string };        // loose typing
-/* ------------------------------------------------------------------ */
+type UserDoc = { username?: string };
 
-/* ---------------------------- HELPERS ------------------------------ */
+/* helpers */
 const fetchDescriptionFromNUSMods = async (code: string): Promise<string> => {
   const moduleCode = code.trim().toUpperCase();
   if (!moduleCode) throw new Error('Please enter a module code.');
@@ -41,7 +37,6 @@ const fetchDescriptionFromNUSMods = async (code: string): Promise<string> => {
   return data.description ?? 'No description available.';
 };
 
-/* ----------------------------- TYPES ------------------------------ */
 interface Listing {
   id: string;
   modName: string;
@@ -52,7 +47,6 @@ interface Listing {
   username?: string;
 }
 
-/* --------------------- HEADER & FOOTER COMPONENTS ------------------ */
 type HeaderProps = {
   modQuery: string;
   onChangeQuery: (v: string) => void;
@@ -101,7 +95,6 @@ const ListHeader = memo(
 );
 ListHeader.displayName = 'ListHeader';
 
-/* ---------- FOOTER (now also shows username) ---------- */
 type FooterProps = { onSignOut: () => void; username?: string };
 
 const ListFooter: React.FC<FooterProps> = ({ onSignOut, username }) => (
@@ -116,16 +109,15 @@ const ListFooter: React.FC<FooterProps> = ({ onSignOut, username }) => (
   </>
 );
 
-/* --------------------------- COMPONENT ----------------------------- */
 const ProfileScreen = () => {
-  /* ---------- Firestore data ---------- */
+  /* Firestore data */
   const [userListings, setUserListings] = useState<Listing[]>([]);
   const [dbLoading, setDbLoading] = useState(true);
 
   const auth = firebase_auth;
   const user = auth.currentUser;
 
-  /* ---------- username ---------- */
+  /* username */
   const [username, setUsername] = useState<string | undefined>();
 
   useEffect(() => {
@@ -140,12 +132,11 @@ const ProfileScreen = () => {
     fetchName();
   }, [user]);
 
-  /* ---------- NUSMods search ---------- */
+  /* NUSMods search */
   const [modQuery, setModQuery] = useState('');
   const [aiAnswer, setAiAnswer] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
 
-  /* Fetch / listen for this user’s listings */
   useEffect(() => {
     if (!user) return;
 
@@ -220,13 +211,12 @@ const ProfileScreen = () => {
     </View>
   );
 
-  /* Sign-out */
+  /* Signout */
   const handleSignOut = async () => {
     await signOut(auth);
     router.replace('/signin');
   };
 
-  /* ----------------------------- JSX ------------------------------- */
   return (
     <FlatList
       data={userListings}
@@ -255,7 +245,7 @@ const ProfileScreen = () => {
   );
 };
 
-/* ----------------------------- STYLES ------------------------------ */
+/* styles */
 const styles = StyleSheet.create({
   container: {
     padding: 16,

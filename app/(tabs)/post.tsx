@@ -19,7 +19,6 @@ export default function NotificationsScreen() {
   const [desiredSlot, setDesiredSlot] = useState('');
   const [classType, setClassType] = useState<string[]>([]); // we’ll keep array, but max 1 elem
 
-  /* ---------- validation: every field + exactly ONE class type ---------- */
   const formIsValid = useMemo(
     () =>
       modName.trim() !== '' &&
@@ -29,11 +28,10 @@ export default function NotificationsScreen() {
     [modName, currentSlot, desiredSlot, classType]
   );
 
-  /* ---------- helpers ---------- */
   const handleToggleClassType = (option: string) => {
     setClassType(prev =>
-      prev.includes(option) ? []             // tap again → deselect
-                           : [option]        // choose new → replace
+      prev.includes(option) ? []             // tap again, deselect
+                           : [option]        // choose new, replace
     );
   };
 
@@ -44,7 +42,6 @@ export default function NotificationsScreen() {
     setClassType([]);
   };
 
-  /* ---------- submit ---------- */
   const handleSubmit = async () => {
     if (!formIsValid) {
       Alert.alert('Incomplete', 'Please fill in every field.');
@@ -71,7 +68,7 @@ export default function NotificationsScreen() {
         modName: modName.trim().toUpperCase(),
         currentSlot: currentSlot.trim(),
         desiredSlot: desiredSlot.trim(),
-        classType,          // will contain exactly one string
+        classType, // will contain exactly one string
         userId: user.uid,
         username,
       });
@@ -83,7 +80,7 @@ export default function NotificationsScreen() {
     }
   };
 
-  /* ---------- UI ---------- */
+  /* UI */
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Create a New Listing</Text>
