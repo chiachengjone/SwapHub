@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { SafeAreaView, View, StyleSheet } from 'react-native';
 import {
-  GiftedChat,
-  IMessage,
-  Bubble,
-  Send,
-  InputToolbar,
-  InputToolbarProps,
-} from 'react-native-gifted-chat';
+  View,
+  StyleSheet,
+  FlatList,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import {
   collection,
   addDoc,
@@ -23,8 +24,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { firebase_db, firebase_auth } from '@/firebase';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/* helper: write a message and bump lastMessage/lastTime in the room */
+type ChatMessage = {
+  id: string;
+  text: string;
+  createdAt: Date;
+  senderId: string;
+};
+
 async function sendMessage(
   chatId: string,
   meUid: string,
@@ -49,158 +57,146 @@ export default function ChatRoom() {
     otherName?: string;
   }>();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const me = firebase_auth.currentUser!;
 
-  // controlled input text
-  const [inputText, setInputText] = useState<string>('');
-
-  const [messages, setMessages] = useState<IMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
   const msgsRef = collection(firebase_db, `messages/${chatId}/items`);
 
-  /* put the other user's name in the header */
   useEffect(() => {
     navigation.setOptions({ title: otherName ?? 'Chat' });
-  }, [otherName]);
+  }, [navigation, otherName]);
 
-  /* live listener */
   useEffect(() => {
     const q = query(msgsRef, orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, snap => {
-      const mapped = snap.docs.map(d => {
-        const data = d.data();
-        const ts = data.createdAt as Timestamp | null | undefined;
-        const createdAt =
-          ts && typeof ts.toDate === 'function' ? ts.toDate() : new Date();
-        return {
-          _id: d.id,
-          text: data.text,
-          createdAt,
-          user: { _id: data.senderId },
-        } as IMessage;
-      });
-      setMessages(mapped);
+    const unsub = onSnapshot(
+      q,
+      snap => {
+        const mapped = snap.docs.map(d => {
+          const data = d.data();
+          const ts = data.createdAt as Timestamp | null | undefined;
+          const createdAt =
+            ts && typeof ts.toDate === 'function' ? ts.toDate() : new Date();
+          return {
+            id: d.id,
+            text: data.text,
+            createdAt,
+            senderId: data.senderId,
+          } as ChatMessage;
+        });
+        setMessages(mapped);
 
-      /* mark unseen messages as seen */
-      snap.docs.forEach(d => {
-        const data = d.data();
-        if (!data.seenBy?.includes(me.uid)) {
-          updateDoc(d.ref, { seenBy: [...(data.seenBy || []), me.uid] });
+        snap.docs.forEach(d => {
+          const data = d.data();
+          if (!data.seenBy?.includes(me.uid)) {
+            updateDoc(d.ref, { seenBy: [...(data.seenBy || []), me.uid] });
+          }
+        });
+      },
+      err => {
+        if (err?.code === 'permission-denied') {
+          setMessages([]);
+          return;
         }
-      });
-    });
+        console.error('Messages listener error', err);
+      },
+    );
     return unsub;
-  }, [chatId]);
+  }, [msgsRef, me.uid]);
 
-  /* send via send icon */
-  const onSend = useCallback(
-    (newMsgs: IMessage[] = []) => {
-      const { text } = newMsgs[0];
-      void sendMessage(chatId as string, me.uid, text.trim(), msgsRef);
-      setInputText('');
-    },
-    [chatId, inputText],
-  );
+  const onSend = useCallback(async () => {
+    const text = input.trim();
+    if (!text) return;
+    setInput('');
+    await sendMessage(chatId as string, me.uid, text, msgsRef);
+  }, [chatId, input, me.uid, msgsRef]);
 
-  /* send via Enter/Return */
-  const handleEnterSend = useCallback(() => {
-    if (inputText.trim()) {
-      void sendMessage(chatId as string, me.uid, inputText.trim(), msgsRef);
-      setInputText('');
-    }
-  }, [chatId, inputText]);
-
-  /* custom renderers (UI only) */
-  const renderBubble = (props: any) => (
-    <Bubble
-      {...props}
-      wrapperStyle={{
-        right: styles.rightBubble,
-        left: styles.leftBubble,
-      }}
-      textStyle={{
-        right: styles.rightBubbleText,
-        left: styles.leftBubbleText,
-      }}
-    />
-  );
-
-  const renderSend = (props: any) => (
-    <Send {...props}>
-      <View style={{ marginRight: 8, marginBottom: 5 }}>
-        <Ionicons
-          name="send"
-          size={24}
-          color={props.text?.trim().length ? '#007bff' : '#ccc'}
-        />
+  const renderItem = ({ item }: { item: ChatMessage }) => {
+    const mine = item.senderId === me.uid;
+    return (
+      <View style={[styles.bubbleRow, mine ? styles.bubbleRowMine : styles.bubbleRowOther]}>
+        <View style={[styles.bubble, mine ? styles.rightBubble : styles.leftBubble]}>
+          <Text style={mine ? styles.rightBubbleText : styles.leftBubbleText}>{item.text}</Text>
+        </View>
       </View>
-    </Send>
-  );
+    );
+  };
 
-  const renderInputToolbar = (props: InputToolbarProps<IMessage>) => (
-    <InputToolbar
-      {...props}
-      containerStyle={styles.inputToolbar}
-      primaryStyle={{ alignItems: 'center' }}
-    />
-  );
-
-  const scrollToBottomComponent = () => (
-    <Ionicons name="chevron-down" size={24} color="#333" />
-  );
-
-  /* render */
   return (
-    <SafeAreaView style={styles.safe}>
-      <GiftedChat
-        messages={messages}
-        onSend={onSend}
-        user={{ _id: me.uid }}
-        text={inputText}
-        onInputTextChanged={setInputText}
-
-        // New: send on Enter/Return
-        textInputProps={{
-          returnKeyType: 'send',
-          blurOnSubmit: true,
-          onSubmitEditing: handleEnterSend,
-        }}
-
-        alwaysShowSend
-        placeholder="Type a message…"
-        renderBubble={renderBubble}
-        renderSend={renderSend}
-        renderInputToolbar={renderInputToolbar}
-        scrollToBottomComponent={scrollToBottomComponent}
+    <KeyboardAvoidingView
+      style={styles.safe}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}
+    >
+      <FlatList
+        data={messages}
+        keyExtractor={item => item.id}
+        renderItem={renderItem}
+        inverted
+        contentContainerStyle={styles.listContent}
       />
-    </SafeAreaView>
+
+      <View style={[styles.inputToolbar, { paddingBottom: Math.max(insets.bottom, 6) }]}>
+        <TextInput
+          style={styles.input}
+          value={input}
+          onChangeText={setInput}
+          placeholder="Type a message..."
+          multiline
+        />
+        <TouchableOpacity onPress={onSend} disabled={!input.trim()} style={styles.sendBtn}>
+          <Ionicons name="send" size={22} color={input.trim() ? '#007bff' : '#bbb'} />
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
-/* styles */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f9fafe' },
-
-  /* bubbles */
-  rightBubble:     { backgroundColor: '#007bff' },
-  leftBubble:      { backgroundColor: '#e5e5ea' },
+  listContent: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  bubbleRow: {
+    flexDirection: 'row',
+    marginVertical: 4,
+  },
+  bubbleRowMine: { justifyContent: 'flex-end' },
+  bubbleRowOther: { justifyContent: 'flex-start' },
+  bubble: {
+    maxWidth: '78%',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  rightBubble: { backgroundColor: '#007bff' },
+  leftBubble: { backgroundColor: '#e5e5ea' },
   rightBubbleText: { color: '#fff' },
-  leftBubbleText:  { color: '#000' },
-
-  /* input bar */
+  leftBubbleText: { color: '#000' },
   inputToolbar: {
     borderTopWidth: 1,
     borderTopColor: '#ddd',
     paddingVertical: 6,
+    paddingHorizontal: 10,
     backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxHeight: 120,
+  },
+  sendBtn: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
   },
 });
-
-
-
-
-
-
-
-
-
-

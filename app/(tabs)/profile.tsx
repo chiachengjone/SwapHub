@@ -143,22 +143,33 @@ const ProfileScreen = () => {
       collection(firebase_db, 'listings'),
       where('userId', '==', user.uid)
     );
-    const unsub = onSnapshot(q, async (snap) => {
-      const items: Listing[] = [];
-      for (const d of snap.docs) {
-        const data = d.data() as Listing;
-        let uName = data.username;
-        if (!uName) {
-          const uDoc = await getDoc(doc(firebase_db, 'users', data.userId));
-          uName = uDoc.exists()
-            ? ((uDoc.data() as UserDoc).username as string)
-            : 'Unknown';
+    const unsub = onSnapshot(
+      q,
+      async (snap) => {
+        const items: Listing[] = [];
+        for (const d of snap.docs) {
+          const data = d.data() as Listing;
+          let uName = data.username;
+          if (!uName) {
+            const uDoc = await getDoc(doc(firebase_db, 'users', data.userId));
+            uName = uDoc.exists()
+              ? ((uDoc.data() as UserDoc).username as string)
+              : 'Unknown';
+          }
+          items.push({ ...data, id: d.id, username: uName });
         }
-        items.push({ ...data, id: d.id, username: uName });
+        setUserListings(items);
+        setDbLoading(false);
+      },
+      (err) => {
+        if (err?.code === 'permission-denied') {
+          setUserListings([]);
+          setDbLoading(false);
+          return;
+        }
+        console.error('Profile listings listener error', err);
       }
-      setUserListings(items);
-      setDbLoading(false);
-    });
+    );
     return () => unsub();
   }, [user]);
 
@@ -208,8 +219,12 @@ const ProfileScreen = () => {
 
   // Signout
   const handleSignOut = async () => {
-    await signOut(auth);
     router.replace('/signin');
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error('Sign out error', e);
+    }
   };
 
   return (
@@ -217,6 +232,7 @@ const ProfileScreen = () => {
       data={userListings}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
+      contentInsetAdjustmentBehavior="never"
       contentContainerStyle={styles.container}
       ListHeaderComponent={
         <ListHeader

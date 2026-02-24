@@ -6,7 +6,6 @@ import {
   View,
   ActivityIndicator,
   StyleSheet,
-  SafeAreaView,
 } from 'react-native';
 import {
   collection,
@@ -53,34 +52,44 @@ export default function ChatList() {
       orderBy('lastTime', 'desc'),
     );
 
-    const unsubChats = onSnapshot(q, async snap => {
-      const tmp: ChatRow[] = await Promise.all(
-        snap.docs.map(async d => {
-          const data = d.data() as any;
-          const otherUid = data.members.find((m: string) => m !== me);
+    const unsubChats = onSnapshot(
+      q,
+      async snap => {
+        const tmp: ChatRow[] = await Promise.all(
+          snap.docs.map(async d => {
+            const data = d.data() as any;
+            const otherUid = data.members.find((m: string) => m !== me);
 
-          /* look up display name */
-          let otherName = otherUid;
-          try {
-            const userSnap = await getDoc(doc(firebase_db, 'users', otherUid));
-            if (userSnap.exists()) {
-              otherName = (userSnap.data() as any).username ?? otherUid;
+            /* look up display name */
+            let otherName = otherUid;
+            try {
+              const userSnap = await getDoc(doc(firebase_db, 'users', otherUid));
+              if (userSnap.exists()) {
+                otherName = (userSnap.data() as any).username ?? otherUid;
+              }
+            } catch (e) {
+              console.warn('failed to load user profile', e);
             }
-          } catch (e) {
-            console.warn('failed to load user profile', e);
-          }
 
-          return {
-            id: d.id,
-            lastMessage: data.lastMessage ?? '',
-            otherUid,
-            otherName,
-          };
-        }),
-      );
+            return {
+              id: d.id,
+              lastMessage: data.lastMessage ?? '',
+              otherUid,
+              otherName,
+            };
+          }),
+        );
 
-      setRows(tmp);
-    });
+        setRows(tmp);
+      },
+      err => {
+        if (err?.code === 'permission-denied') {
+          setRows([]);
+          return;
+        }
+        console.error('Chats listener error', err);
+      }
+    );
 
     return unsubChats;
   }, [me]);
@@ -144,15 +153,16 @@ export default function ChatList() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <FlatList
         data={rows}
         keyExtractor={i => i.id}
         renderItem={renderItem}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={{ paddingBottom: 12 }}
+        contentInsetAdjustmentBehavior="never"
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -50,14 +50,25 @@ export default function WelcomeScreen() {
 
   /* stream listings */
   useEffect(() => {
-    const unsub = onSnapshot(collection(firebase_db, 'listings'), snap => {
-      const list: Listing[] = [];
-      snap.forEach(d =>
-        list.push({ id: d.id, ...(d.data() as DocumentData) } as Listing),
-      );
-      setAllListings(list);
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      collection(firebase_db, 'listings'),
+      snap => {
+        const list: Listing[] = [];
+        snap.forEach(d =>
+          list.push({ id: d.id, ...(d.data() as DocumentData) } as Listing),
+        );
+        setAllListings(list);
+        setLoading(false);
+      },
+      err => {
+        if (err?.code === 'permission-denied') {
+          setAllListings([]);
+          setLoading(false);
+          return;
+        }
+        console.error('Listings listener error', err);
+      }
+    );
     return unsub;
   }, []);
 
@@ -67,13 +78,23 @@ export default function WelcomeScreen() {
       collection(firebase_db, 'listings'),
       where('userId', '==', uid),
     );
-    const unsub = onSnapshot(q, snap => {
-      const mine: Listing[] = [];
-      snap.forEach(d =>
-        mine.push({ id: d.id, ...(d.data() as DocumentData) } as Listing),
-      );
-      setMyListings(mine);
-    });
+    const unsub = onSnapshot(
+      q,
+      snap => {
+        const mine: Listing[] = [];
+        snap.forEach(d =>
+          mine.push({ id: d.id, ...(d.data() as DocumentData) } as Listing),
+        );
+        setMyListings(mine);
+      },
+      err => {
+        if (err?.code === 'permission-denied') {
+          setMyListings([]);
+          return;
+        }
+        console.error('My listings listener error', err);
+      }
+    );
     return unsub;
   }, [uid]);
 
@@ -222,6 +243,7 @@ export default function WelcomeScreen() {
         data={feed}
         keyExtractor={item => item.id}
         contentContainerStyle={feed.length === 0 && styles.center}
+        contentInsetAdjustmentBehavior="never"
         ListEmptyComponent={<Text>No listings found.</Text>}
         renderItem={({ item }) => (
           <View style={[styles.card, item.isMatch && styles.matchCard]}>

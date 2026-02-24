@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  FlatList,
   Keyboard,
   Alert,
   ScrollView,
@@ -54,20 +53,30 @@ export default function ExploreScreen() {
     );
 
 
-    const unsubFriends = onSnapshot(qFriends, async snap => {
-      const rows: FriendRow[] = [];
-      for (const d of snap.docs) {
-        const data = d.data() as any;
-        const otherUid: string = data.users.find((u: string) => u !== me.uid);
-        //look up username
-        const uSnap = await getDocs(query(
-          collection(firebase_db, 'users'), where('__name__', '==', otherUid)));
-        const uName = uSnap.empty ? otherUid
-          : (uSnap.docs[0].data() as any).username ?? otherUid;
-        rows.push({ docId: d.id, uid: otherUid, username: uName });
+    const unsubFriends = onSnapshot(
+      qFriends,
+      async snap => {
+        const rows: FriendRow[] = [];
+        for (const d of snap.docs) {
+          const data = d.data() as any;
+          const otherUid: string = data.users.find((u: string) => u !== me.uid);
+          //look up username
+          const uSnap = await getDocs(query(
+            collection(firebase_db, 'users'), where('__name__', '==', otherUid)));
+          const uName = uSnap.empty ? otherUid
+            : (uSnap.docs[0].data() as any).username ?? otherUid;
+          rows.push({ docId: d.id, uid: otherUid, username: uName });
+        }
+        setFriends(rows);
+      },
+      err => {
+        if (err?.code === 'permission-denied') {
+          setFriends([]);
+          return;
+        }
+        console.error('Friends listener error', err);
       }
-      setFriends(rows);
-    });
+    );
 
     //pending and I am the recipient
     const qReq = query(ref,
@@ -75,20 +84,30 @@ export default function ExploreScreen() {
       where('accepted', '==', false),
     );
 
-    const unsubReq = onSnapshot(qReq, async snap => {
-      const rows: FriendRow[] = [];
-      for (const d of snap.docs) {
-        const data = d.data() as any;
-        if (data.requestFrom === me.uid) continue;   //skip outgoing
-        const otherUid: string = data.requestFrom;
-        const uSnap = await getDocs(query(
-          collection(firebase_db, 'users'), where('__name__', '==', otherUid)));
-        const uName = uSnap.empty ? otherUid
-          : (uSnap.docs[0].data() as any).username ?? otherUid;
-        rows.push({ docId: d.id, uid: otherUid, username: uName });
+    const unsubReq = onSnapshot(
+      qReq,
+      async snap => {
+        const rows: FriendRow[] = [];
+        for (const d of snap.docs) {
+          const data = d.data() as any;
+          if (data.requestFrom === me.uid) continue;   //skip outgoing
+          const otherUid: string = data.requestFrom;
+          const uSnap = await getDocs(query(
+            collection(firebase_db, 'users'), where('__name__', '==', otherUid)));
+          const uName = uSnap.empty ? otherUid
+            : (uSnap.docs[0].data() as any).username ?? otherUid;
+          rows.push({ docId: d.id, uid: otherUid, username: uName });
+        }
+        setRequests(rows);
+      },
+      err => {
+        if (err?.code === 'permission-denied') {
+          setRequests([]);
+          return;
+        }
+        console.error('Friend requests listener error', err);
       }
-      setRequests(rows);
-    });
+    );
 
 
     return () => { unsubFriends(); unsubReq(); };
@@ -153,8 +172,8 @@ export default function ExploreScreen() {
     }
   };
 
-  const renderListing = ({ item }: { item: Listing }) => (
-    <View style={styles.card}>
+  const renderListing = (item: Listing) => (
+    <View key={item.id} style={styles.card}>
       <Text style={styles.modName}>{item.modName}</Text>
       <Text>Current: {item.currentSlot} → Desired: {item.desiredSlot}</Text>
       <Text>Type: {item.classType?.join(', ') || '—'}</Text>
@@ -172,8 +191,8 @@ export default function ExploreScreen() {
   );
 
 
-  const renderFriend = ({ item }: { item: FriendRow }) => (
-    <View style={styles.card}>
+  const renderFriend = (item: FriendRow) => (
+    <View key={item.docId} style={styles.card}>
       <Text style={styles.modName}>{item.username}</Text>
       <TouchableOpacity
         style={styles.chatBtn}
@@ -186,8 +205,8 @@ export default function ExploreScreen() {
   );
 
 
-  const renderRequest = ({ item }: { item: FriendRow }) => (
-    <View style={styles.card}>
+  const renderRequest = (item: FriendRow) => (
+    <View key={item.docId} style={styles.card}>
       <Text style={styles.modName}>{item.username}</Text>
       <View style={{ flexDirection: 'row', marginTop: 8 }}>
         <TouchableOpacity
@@ -249,6 +268,7 @@ export default function ExploreScreen() {
     <ScrollView                     
       style={styles.outer}
       contentContainerStyle={styles.scrollBody}
+      contentInsetAdjustmentBehavior="never"
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.header}>Search User by Username</Text>
@@ -287,14 +307,9 @@ export default function ExploreScreen() {
           ) : userListings && userListings.length === 0 ? (
             <Text style={styles.emptyText}>This user has no listings.</Text>
           ) : (
-            <FlatList
-              data={userListings ?? []}
-              keyExtractor={i => i.id}
-              renderItem={renderListing}
-              contentContainerStyle={{ paddingBottom: 32 }}
-              style={styles.previewList}
-              nestedScrollEnabled
-            />
+            <View style={styles.previewList}>
+              {(userListings ?? []).map(renderListing)}
+            </View>
           )}
         </View>
       )}
@@ -306,14 +321,9 @@ export default function ExploreScreen() {
         {friends.length === 0 ? (
           <Text style={styles.emptyText}>No friends yet.</Text>
         ) : (
-          <FlatList
-            data={friends}
-            keyExtractor={i => i.docId}
-            renderItem={renderFriend}
-            contentContainerStyle={{ paddingBottom: 16 }}
-            style={styles.previewList}
-            nestedScrollEnabled
-          />
+          <View style={styles.previewList}>
+            {friends.map(renderFriend)}
+          </View>
         )}
       </View>
 
@@ -324,14 +334,9 @@ export default function ExploreScreen() {
         {requests.length === 0 ? (
           <Text style={styles.emptyText}>No incoming requests.</Text>
         ) : (
-          <FlatList
-            data={requests}
-            keyExtractor={i => i.docId}
-            renderItem={renderRequest}
-            contentContainerStyle={{ paddingBottom: 32 }}
-            style={styles.previewList}
-            nestedScrollEnabled
-          />
+          <View style={styles.previewList}>
+            {requests.map(renderRequest)}
+          </View>
         )}
       </View>
     </ScrollView>
@@ -402,6 +407,7 @@ const styles = StyleSheet.create({
   friendsWrapper: { backgroundColor: '#e8f5e9' },  // light green
   requestsWrapper: { backgroundColor: '#fff3e0' },  // light orange
 });
+
 
 
 
