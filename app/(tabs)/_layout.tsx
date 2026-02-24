@@ -1,49 +1,91 @@
-import React from 'react';
-import { Tabs } from "expo-router";
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useEffect } from 'react'
+import { Tabs } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
+import { firebase_auth } from '@/firebase'
+import { listenUnseen } from '@/lib/chat'
+import { onAuthStateChanged } from 'firebase/auth'
+import { ActivityIndicator, View } from 'react-native'
+import { router } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-export default function TabLayout() {
+export default function RootLayout() {
+  const [badge, setBadge] = useState<number>()
+  const [authReady, setAuthReady] = useState(false)
+  const [isAuthed, setIsAuthed] = useState(false)
+  const insets = useSafeAreaInsets()
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(firebase_auth, user => {
+      setIsAuthed(!!user)
+      setAuthReady(true)
+      if (!user) router.replace('/signin')
+    })
+    return unsub
+  }, [])
+
+  useEffect(() => {
+    if (!isAuthed) return
+    const uid = firebase_auth.currentUser?.uid
+    if (!uid) return
+    const unsub = listenUnseen(uid, count => setBadge(count || undefined))
+    return unsub
+  }, [isAuthed])
+
+  if (!authReady) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator />
+      </View>
+    )
+  }
+
+  if (!isAuthed) return null
+
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
+    <Tabs
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarHideOnKeyboard: true,
+        tabBarStyle: {
+          height: 56 + Math.min(insets.bottom, 8),
+          paddingTop: 6,
+          paddingBottom: 6,
+          backgroundColor: '#fff',
+          borderTopColor: '#ddd',
+          borderTopWidth: 1,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 2,
+        },
+        tabBarIcon: ({ color, size }) => {
+          const icons: Record<string, any> = {
+            welcome: 'home',
+            explore: 'search',
+            post: 'add-circle',
+            chat: 'chatbubbles',
+            profile: 'person',
+          }
+          return <Ionicons name={icons[route.name]} size={size} color={color} />
+        },
+      })}
+    >
+      <Tabs.Screen name="welcome" options={{ title: 'Home' }} />
+      <Tabs.Screen name="explore" options={{ title: 'Explore' }} />
+      <Tabs.Screen name="post" options={{ title: 'Post' }} />
+      {/* only one "chat" tab here */}
       <Tabs.Screen
-        name='welcome'
+        name="chat"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name='home-outline' size={22} color={color} />
-          )
+          title: 'Chats',
+          tabBarBadge: badge,
+          lazy: false,
         }}
       />
-
-      <Tabs.Screen name='explore' options={{
-        title: 'Explore',
-        tabBarIcon: ({ color }) => (
-          <Ionicons name='search-outline' size={22} color={color} />
-        )
-      }} />
-      <Tabs.Screen
-        name="post"
-        options={{
-          title: 'Post',
-          tabBarLabel: 'Post',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'create' : 'create-outline'} color={color} size={24} />
-          ),
-        }}
-      />
-      <Tabs.Screen name='cart' options={{
-        title: 'Cart',
-        tabBarBadge: 3,
-        tabBarIcon: ({ color }) => (
-          <Ionicons name='cart-outline' size={22} color={color} />
-        )
-      }} />
-      <Tabs.Screen name='profile' options={{
-        title: 'Profile',
-        tabBarIcon: ({ color }) => (
-          <Ionicons name='person-outline' size={22} color={color} />
-        )
-      }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
-  );
+  )
 }
+
+
+
+
